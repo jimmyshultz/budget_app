@@ -1,0 +1,97 @@
+# Plan: Desktop App (open source, bring your own Plaid keys)
+
+**Goal:** someone downloads an installer, opens the app, pastes in their own Plaid keys, and
+connects their banks. No Node, no terminal. Their data never leaves their computer except
+through the app's own calls to Plaid.
+
+## 1. Electron or Tauri
+
+**Decision: Electron.** The app needs Node.js to run: its Next.js server, the SQLite library
+(`better-sqlite3`, which includes compiled native code) and the Plaid SDK. Electron ships with
+Node built in, so today's code runs almost unchanged. Tauri produces much smaller downloads, but
+it doesn't include Node, so a separate Node program would have to be bundled alongside it.
+
+```
+Electron app
+ ├─ Main process
+ │   ├─ picks a random free port and a random token for each launch
+ │   ├─ starts the Next.js server (self-contained production build) on 127.0.0.1:<port>
+ │   └─ opens a locked-down window pointing at it
+ ├─ Next.js server (today's app: pages, server actions, sync, Plaid)
+ └─ Data folder: the operating system's per-user app-data folder, holding budget.db
+```
+
+## 2. Code changes
+
+| Area | Today | Desktop version |
+|---|---|---|
+| Data location | `./data/budget.db` | The per-user app-data folder from Electron, passed in as a setting |
+| Plaid keys | `.env.local` | Entered in an in-app **Settings** screen, stored encrypted with Electron's `safeStorage` |
+| Encryption key | macOS Keychain via the `security` command | `safeStorage`, which uses Keychain on macOS, DPAPI on Windows and libsecret on Linux |
+| Local-only protection | Rejects hostnames other than localhost | Keep that, **plus** a per-launch token: the window gets it as a cookie and the server rejects requests without it, so other programs and websites on the machine can't reach the server |
+| Scripts (`setup`, `reset-data`, `key:to-keychain`) | Terminal commands | Settings screen: keys, switch Sandbox/Production, reset data, export a backup |
+| Links | Open in the browser | External links open in the system browser; the app window never loads other websites |
+
+Pages, budgeting logic, categorization and Plaid sync don't change. Development still uses
+`npm run dev`, with a desktop-app dev mode that points the window at the dev server.
+
+**Locking down Electron:** `contextIsolation`, `sandbox` and `nodeIntegration: false`, so web pages
+in the window can't reach Node; allow only the app's own address and the Plaid/bank pop-ups;
+allow only one copy of the app to run at a time.
+
+## 3. First-run setup flow
+
+1. **Welcome:** a plain explanation that the app runs locally and needs a free Plaid account.
+2. **Plaid keys:** step-by-step instructions (sign up → Developers → Keys), paste client ID and
+   secret, choose Sandbox or Production. The app tests the keys immediately.
+3. **Try Sandbox first:** connect a fake bank using `user_good` so people see the app working
+   before dealing with Plaid's Production approval.
+4. **Going live:** a checklist covering requesting products, OAuth registration for some banks,
+   and resetting the Sandbox data.
+
+Each user needs their own Plaid Production approval. The app can guide them but can't do it for
+them. This is the main reason to add SimpleFIN later as an alternative way to connect banks.
+
+## 4. Distribution
+
+- **Builds:** `electron-builder` produces a macOS `.dmg` (Apple Silicon and Intel), a Windows `.exe`
+  installer and a Linux AppImage.
+- **Automated builds:** GitHub Actions builds all three on a version tag and publishes them to GitHub Releases.
+- **Code signing:** without it, macOS refuses to open the app and Windows shows warnings.
+  - macOS: Apple Developer Program (about $99/year), including notarization.
+  - Windows: a code-signing certificate, or a cheaper option such as Azure Trusted Signing.
+- **Auto-update:** `electron-updater` checks GitHub Releases. Requires signing on macOS.
+
+## 5. Phases
+
+| Phase | What | Done when |
+|---|---|---|
+| **0. Risk tests** | Run the Next.js server inside Electron with SQLite rebuilt for Electron. **Test Plaid Link inside the Electron window, including OAuth pop-ups for a real bank.** Test `safeStorage`. | A real OAuth bank connects inside the desktop window |
+| **1. Make it portable** | Data folder as a setting; swappable storage for keys (env vars in development, `safeStorage` in the app); remove the macOS-only code | `npm run dev` still works, with no `.env.local` or Keychain dependency in the core code |
+| **2. Desktop shell** | Main process, random port and token, window lockdown, single running copy, menus, clean shutdown | The app launches from a packaged build |
+| **3. In-app setup and settings** | The setup flow above; Settings (keys, environment, reset, export backup) | A non-developer can go from install to Sandbox data without a terminal |
+| **4. Packaging and releases** | electron-builder, signing, notarization, GitHub Actions, auto-update | A tagged release produces signed installers |
+| **5. Open-source launch** | Make the repo public: license, SECURITY.md, Plaid setup guide with screenshots, issue templates, and a commit email that doesn't reveal a personal address | Public repo with release downloads |
+| **Later** | SimpleFIN as a second way to connect banks; CSV import; restoring a backup onto a new machine | |
+
+**Biggest risk:** Plaid Link's OAuth pop-ups inside Electron. Some banks open their own login in a
+pop-up, and Electron has to allow it and pass the result back correctly. If that doesn't work
+cleanly, the fallback is Plaid's Hosted Link, which opens in the user's regular browser and returns
+to the app.
+
+**Design issue for later:** stored bank connections are encrypted with a key tied to one computer.
+A backup restored on a new machine would keep history, budgets and rules, but banks would need
+reconnecting, and reconnecting creates new account IDs. Restore would have to match old and new
+accounts by institution and the last 4 digits of the account number, so history doesn't split.
+
+## 6. Open decisions
+
+1. **Platforms for version 1:** macOS only first, or all three from the start?
+2. **Code signing:** pay for the Apple Developer Program (about $99/year)? Without it, macOS users
+   have to right-click → Open, plus a security prompt, to launch the app.
+3. **License:** MIT or AGPL?
+4. **SimpleFIN:** in version 1, or later?
+
+## Phase 0 results
+
+_In progress._
