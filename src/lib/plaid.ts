@@ -1,24 +1,32 @@
 import "server-only";
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
+import { getConfig } from "./config";
 
-const env = process.env.PLAID_ENV ?? "sandbox";
+let cached: { key: string; client: PlaidApi } | null = null;
 
-export const plaidEnv = env;
+/** Plaid client for the current settings; rebuilt if the keys or environment change. */
+export function getPlaid(): PlaidApi {
+  const { plaidClientId, plaidSecret, plaidEnv } = getConfig();
+  const key = `${plaidEnv}:${plaidClientId}:${plaidSecret}`;
+  if (cached?.key !== key) {
+    const client = new PlaidApi(
+      new Configuration({
+        basePath: PlaidEnvironments[plaidEnv],
+        baseOptions: { headers: { "PLAID-CLIENT-ID": plaidClientId, "PLAID-SECRET": plaidSecret } },
+      }),
+    );
+    cached = { key, client };
+  }
+  return cached.client;
+}
 
-export const plaid = new PlaidApi(
-  new Configuration({
-    basePath: PlaidEnvironments[env],
-    baseOptions: {
-      headers: {
-        "PLAID-CLIENT-ID": process.env.PLAID_CLIENT_ID ?? "",
-        "PLAID-SECRET": process.env.PLAID_SECRET ?? "",
-      },
-    },
-  }),
-);
+export function getPlaidEnv() {
+  return getConfig().plaidEnv;
+}
 
 export function plaidConfigured(): boolean {
-  return Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
+  const { plaidClientId, plaidSecret } = getConfig();
+  return Boolean(plaidClientId && plaidSecret);
 }
 
 /** Pull a readable message out of a Plaid/axios error without leaking tokens. */

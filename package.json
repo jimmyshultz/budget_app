@@ -4,17 +4,17 @@
   "private": true,
   "scripts": {
     "setup": "node scripts/setup.mjs",
-    "dev": "mkdir -p .next && chmod 700 .next && next dev -H 127.0.0.1",
-    "build": "next build",
-    "start": "next start -H 127.0.0.1",
+    "dev": "node scripts/run.mjs next dev -H 127.0.0.1",
+    "build": "node scripts/run.mjs next build",
+    "start": "node scripts/run.mjs next start -H 127.0.0.1",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
     "reset-data": "node scripts/reset-data.mjs",
-    "sync": "tsx --conditions=react-server scripts/sync.mts",
+    "sync": "node scripts/run.mjs tsx --conditions=react-server scripts/sync.mts",
     "key:to-keychain": "node scripts/move-key-to-keychain.mjs",
-    "app": "mkdir -p .next && chmod 700 .next && next build && next start -H 127.0.0.1"
+    "app": "npm run build && npm run start"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

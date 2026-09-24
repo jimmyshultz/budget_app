@@ -1,40 +1,21 @@
 import "server-only";
-import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
+import { getConfig } from "./config";
 
-// Plaid access tokens are encrypted at rest with AES-256-GCM. The key lives in the
-// macOS login Keychain (created by `npm run setup`), never in the database or repo.
-// TOKEN_ENCRYPTION_KEY in the environment still works as an override.
-
-// Keep in sync with scripts/keychain.mjs.
-const KEYCHAIN_SERVICE = "budget_app";
-const KEYCHAIN_ACCOUNT = "token-encryption-key";
-
-let cachedKey: Buffer | null = null;
-
-function readKeychain(): string | null {
-  try {
-    return execFileSync(
-      "security",
-      ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", KEYCHAIN_ACCOUNT, "-w"],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
-    ).trim();
-  } catch {
-    return null;
-  }
-}
+// Plaid access tokens are encrypted at rest with AES-256-GCM. The key comes from the app
+// config and is never stored in the database or the repo. Where it lives on disk depends on
+// how the app runs: the OS keychain for the desktop app and for development on macOS
+// (see scripts/run.mjs), or TOKEN_ENCRYPTION_KEY in the environment elsewhere.
 
 function key(): Buffer {
-  if (cachedKey) return cachedKey;
-  const hex = process.env.TOKEN_ENCRYPTION_KEY || readKeychain();
+  const hex = getConfig().tokenEncryptionKey;
   if (!hex || !/^[0-9a-f]{64}$/.test(hex)) {
     throw new Error(
-      "Encryption key not found in the macOS Keychain (service \"budget_app\"). Run `npm run setup`, " +
-        "or unlock your login keychain if you're signed in remotely.",
+      "Encryption key not available. Run `npm run setup`, start the app with the npm scripts " +
+        "(they load the key), or set TOKEN_ENCRYPTION_KEY to 64 hex characters.",
     );
   }
-  cachedKey = Buffer.from(hex, "hex");
-  return cachedKey;
+  return Buffer.from(hex, "hex");
 }
 
 export function encrypt(plaintext: string): string {

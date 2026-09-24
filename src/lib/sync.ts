@@ -4,7 +4,7 @@ import type { AccountBase, RemovedTransaction, Transaction as PlaidTxn } from "p
 import { db, schema } from "@/db";
 import type { PlaidItem } from "@/db/schema";
 import { decrypt } from "./crypto";
-import { plaid, plaidErrorMessage } from "./plaid";
+import { getPlaid, plaidErrorMessage } from "./plaid";
 import { categoryNameForPlaid, matchRule, type Rule } from "./categorize";
 
 const toCents = (n: number | null | undefined) => (n == null ? null : Math.round(n * 100));
@@ -36,7 +36,7 @@ export async function syncItem(item: PlaidItem): Promise<SyncResult> {
   try {
     const accessToken = decrypt(item.accessTokenEnc);
 
-    const { data } = await plaid.accountsGet({ access_token: accessToken });
+    const { data } = await getPlaid().accountsGet({ access_token: accessToken });
     upsertAccounts(item.id, data.accounts);
 
     if (item.products.split(",").includes("transactions")) {
@@ -97,7 +97,7 @@ async function fetchTransactionChanges(accessToken: string, startCursor: string 
     try {
       let hasMore = true;
       while (hasMore) {
-        const { data } = await plaid.transactionsSync({
+        const { data } = await getPlaid().transactionsSync({
           access_token: accessToken,
           cursor: changes.cursor || undefined,
           count: 500,

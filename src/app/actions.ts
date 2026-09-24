@@ -8,7 +8,7 @@ import { isManualKind } from "@/lib/accounts";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { parseDollars } from "@/lib/format";
 import { addMonths, parseMonth } from "@/lib/months";
-import { plaid, plaidConfigured, plaidErrorMessage } from "@/lib/plaid";
+import { getPlaid, plaidConfigured, plaidErrorMessage } from "@/lib/plaid";
 import { syncAll, syncItem, type SyncResult } from "@/lib/sync";
 
 export type ConnectKind = "banking" | "investments" | "loan";
@@ -25,10 +25,10 @@ type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
 export async function createLinkToken(kind: ConnectKind): Promise<Result<string>> {
   if (!plaidConfigured()) {
-    return { ok: false, error: "Plaid keys missing. Add PLAID_CLIENT_ID and PLAID_SECRET to .env.local." };
+    return { ok: false, error: "Plaid keys missing. Add your Plaid client ID and secret." };
   }
   try {
-    const { data } = await plaid.linkTokenCreate({
+    const { data } = await getPlaid().linkTokenCreate({
       client_name: "Budget App",
       language: "en",
       country_codes: [CountryCode.Us],
@@ -48,7 +48,7 @@ export async function exchangePublicToken(
   institution: { id: string | null; name: string | null },
 ): Promise<Result<SyncResult>> {
   try {
-    const { data } = await plaid.itemPublicTokenExchange({ public_token: publicToken });
+    const { data } = await getPlaid().itemPublicTokenExchange({ public_token: publicToken });
     db.insert(schema.plaidItems)
       .values({
         id: data.item_id,
@@ -76,7 +76,7 @@ export async function createReconnectLinkToken(itemId: string): Promise<Result<s
   const item = db.select().from(schema.plaidItems).where(eq(schema.plaidItems.id, itemId)).get();
   if (!item) return { ok: false, error: "Connection not found." };
   try {
-    const { data } = await plaid.linkTokenCreate({
+    const { data } = await getPlaid().linkTokenCreate({
       client_name: "Budget App",
       language: "en",
       country_codes: [CountryCode.Us],
@@ -119,7 +119,7 @@ export async function disconnectItem(itemId: string): Promise<Result<null>> {
   if (!item) return { ok: false, error: "Connection not found." };
   try {
     // Frees the connection on Plaid's side (it counts toward your plan's limit).
-    await plaid.itemRemove({ access_token: decrypt(item.accessTokenEnc) });
+    await getPlaid().itemRemove({ access_token: decrypt(item.accessTokenEnc) });
   } catch (err) {
     const message = plaidErrorMessage(err);
     // Already gone on Plaid's side (e.g. a Sandbox item after switching to Production): just clean up locally.

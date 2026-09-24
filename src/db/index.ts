@@ -6,8 +6,9 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "./schema";
 import { DEFAULT_CATEGORIES } from "@/lib/categorize";
+import { getConfig } from "@/lib/config";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = getConfig().dataDir;
 const DB_PATH = path.join(DATA_DIR, "budget.db");
 
 function open() {

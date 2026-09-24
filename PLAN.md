@@ -95,3 +95,24 @@ accounts by institution and the last 4 digits of the account number, so history 
 ## Phase 0 results
 
 _In progress._
+
+## Phase 1 results (make it portable)
+
+Done. The server reads all settings from `src/lib/config.ts`: environment variables by default,
+with `setConfig()` for the desktop app to supply secrets from `safeStorage`. No core code touches
+`process.env` or the macOS Keychain.
+
+- `DATA_DIR`, Plaid keys/environment and the token key all come from config. The Plaid client is
+  built lazily and rebuilt if the keys or environment change (needed for in-app settings in Phase 3).
+- `scripts/run.mjs` starts every npm script: keeps `.next/` private (cross-platform, replacing
+  `mkdir -p && chmod`) and, on macOS, loads the key from the Keychain into the environment.
+  `setup` writes the key to `.env.local` on non-macOS systems.
+- **Found:** Turbopack's on-disk cache snapshots environment variables, so secrets were being written
+  to `.next/cache`. Turned off (`turbopackFileSystemCacheForDev/ForBuild: false`); verified 0 files in
+  `.next/` contain the key, Plaid secret or client ID after dev, normal and standalone builds.
+- Standalone output is opt-in (`BUILD_STANDALONE=1`) because `next start` doesn't support it.
+- Verified: `npm run dev`, `npm run app`, `npm run sync` and in-app Sync all work; a missing key
+  gives a clear error.
+
+Not carried over from the spike yet: the Electron shell (Phase 2) and Hosted Link Connect/Reconnect
+(Phases 2–3).

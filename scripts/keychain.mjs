@@ -1,11 +1,12 @@
-// Reads/writes the token encryption key in the macOS login Keychain.
-// Keep SERVICE/ACCOUNT in sync with src/lib/crypto.ts.
+// Reads/writes the token encryption key in the macOS login Keychain (development only;
+// the desktop app uses Electron safeStorage). Used by scripts/run.mjs and scripts/setup.mjs.
 import { execFileSync } from "node:child_process";
 
 export const SERVICE = "budget_app";
 export const ACCOUNT = "token-encryption-key";
 
 export function readKeychainKey() {
+  if (process.platform !== "darwin") return null;
   try {
     return execFileSync("security", ["find-generic-password", "-s", SERVICE, "-a", ACCOUNT, "-w"], {
       encoding: "utf8",

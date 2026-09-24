@@ -23,7 +23,8 @@ file and leaves the machine only through the app's own API calls to Plaid.
 
 ## Requirements
 
-- macOS (the encryption key is stored in the login Keychain; see [Security](#security))
+- macOS, Linux or Windows. On macOS the encryption key is kept in the login Keychain; elsewhere it
+  goes in `.env.local` (see [Security](#security)).
 - Node.js 22 or later
 - A Plaid account (free to sign up; Sandbox is free)
 
@@ -36,7 +37,8 @@ file and leaves the machine only through the app's own API calls to Plaid.
    npm install
    npm run setup
    ```
-   `setup` creates an encryption key in your Keychain and a `.env.local` file.
+   `setup` creates a `.env.local` file and an encryption key (in the Keychain on macOS, in
+   `.env.local` elsewhere).
 3. Paste your Plaid client ID and secret into `.env.local`.
 4. Start the app and open http://127.0.0.1:3000:
    ```bash
@@ -83,6 +85,11 @@ If an institution can't be connected, add it on **Accounts** as a manual account
   overwritten, even when a pending charge posts.
 - **Money** is stored as integer cents. Transaction amounts follow Plaid's sign convention:
   positive = money out.
+- **Configuration** (`src/lib/config.ts`): the only place the server reads settings. Values come
+  from environment variables (`DATA_DIR`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`,
+  `TOKEN_ENCRYPTION_KEY`) or from `setConfig()`, which the desktop app will use. The npm scripts
+  start everything through `scripts/run.mjs`, which keeps `.next/` private and, on macOS, loads the
+  encryption key from the Keychain.
 - **Schema changes:** edit `src/db/schema.ts` and run `npm run db:generate`. Migrations in
   `drizzle/` are applied automatically on startup.
 
@@ -90,12 +97,13 @@ If an institution can't be connected, add it on **Accounts** as a manual account
 
 - The server listens on `127.0.0.1` only, and `src/proxy.ts` rejects any request whose `Host`
   isn't localhost (DNS-rebinding protection). Server actions also get Next.js's origin checks.
-- Plaid access tokens are encrypted in the database with AES-256-GCM. The key is kept in the macOS
-  login Keychain (service `budget_app`), not in the repo, the database or `.env.local`. Setting
-  `TOKEN_ENCRYPTION_KEY` (64 hex characters) in the environment overrides the Keychain, e.g. on
-  another OS.
-- `data/` and `.env.local` are git-ignored and created with owner-only permissions. `.next/` is also
-  kept owner-only, because Next.js's build tool (Turbopack) caches environment values there.
+- Plaid access tokens are encrypted in the database with AES-256-GCM. On macOS the key is kept in
+  the login Keychain (service `budget_app`), not in the repo, the database or `.env.local`. On other
+  systems it's `TOKEN_ENCRYPTION_KEY` (64 hex characters) in `.env.local`.
+- `data/` and `.env.local` are git-ignored and created with owner-only permissions. Turbopack's
+  on-disk cache is turned off because it snapshots environment variables (including secrets), and
+  `.next/` is kept owner-only.
+- Desktop (`BUILD_STANDALONE=1`) builds exclude `data/` and `.env*` from the output.
 - Only read-only Plaid products are used. Nothing in the app can move money.
 - Recommended: turn on full-disk encryption (FileVault) and use two-factor login on your Plaid dashboard.
 
@@ -109,14 +117,15 @@ budgets and rules are kept, but each institution has to be reconnected.
 
 | Command | What it does |
 |---|---|
-| `npm run setup` | Create the Keychain key and `.env.local` (safe to re-run) |
+| `npm run setup` | Create `.env.local` and the encryption key (safe to re-run) |
 | `npm run app` | Build and serve the app on 127.0.0.1:3000 (for everyday use) |
 | `npm run dev` | Development server with hot reload |
 | `npm run sync` | Sync all connections from the terminal |
 | `npm run typecheck` / `npm run lint` | Static checks |
 | `npm run db:generate` | Generate a migration after editing the schema |
 | `npm run db:studio` | Browse the local database |
-| `npm run key:to-keychain` | Move a key stored in `.env.local` (older setups) into the Keychain |
+| `npm run build` / `npm run start` | The two halves of `npm run app` |
+| `npm run key:to-keychain` | macOS: move a key stored in `.env.local` (older setups) into the Keychain |
 | `npm run reset-data -- --yes` | Delete all local data: connections, transactions, budgets, rules |
 
 ## Project layout

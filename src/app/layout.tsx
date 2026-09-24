@@ -4,7 +4,7 @@ import { connection } from "next/server";
 import { min } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { SyncButton } from "@/components/SyncButton";
-import { plaidEnv } from "@/lib/plaid";
+import { getPlaidEnv } from "@/lib/plaid";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,6 +22,7 @@ const NAV = [
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   await connection();
+  const plaidEnv = getPlaidEnv();
   // Oldest sync across connections, so the label never overstates freshness.
   const [{ lastSyncedAt }] = db
     .select({ lastSyncedAt: min(schema.plaidItems.lastSyncedAt) })
