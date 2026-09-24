@@ -61,6 +61,6 @@
       "target": "dir"
     },
     "npmRebuild": false,
-    "afterPack": "scripts/after-pack.cjs"
+    "afterPack": "scripts/after-pack.mjs"
   }
 }
