@@ -116,3 +116,56 @@ with `setConfig()` for the desktop app to supply secrets from `safeStorage`. No 
 
 Not carried over from the spike yet: the Electron shell (Phase 2) and Hosted Link Connect/Reconnect
 (Phases 2–3).
+
+## Phase 2 results (desktop shell)
+
+Done. `npm run desktop` runs the app in Electron from a dev checkout; `npm run desktop:package`
+builds an unsigned `dist-desktop/mac-arm64/Budget.app`, which launches and works.
+
+**How it fits together**
+- `electron/main.mjs` starts the standalone server as an Electron utility process on
+  `127.0.0.1:<random port>`, then opens one locked-down window.
+- **Secrets** (Plaid keys, token encryption key) are stored in `<userData>/secrets.json`, encrypted
+  with `safeStorage` (`electron/secrets.mjs`). The main process sends them to the server over the
+  private parent port; `src/instrumentation.ts` → `src/lib/desktop.ts` waits for them and applies
+  them with `setConfig()` before the server handles any request. The server's environment holds no
+  secrets (verified).
+- **Launch token:** a random token per launch, set as an HTTP-only, SameSite=Strict cookie for the
+  app's origin. `src/proxy.ts` rejects any request without it (verified 403 for missing/wrong token,
+  including server-action POSTs).
+- **Window:** `contextIsolation`, `sandbox`, no `nodeIntegration`, no webviews, all permission
+  requests denied, strict CSP (same-origin only; `'unsafe-inline'` for Next.js inline scripts and
+  styles), never navigates off the app's origin; `https:` links and Plaid Hosted Link open in the
+  default browser.
+- **Hosted Link** for Connect and Reconnect in the desktop app (`hosted` prop from
+  `getConfig().desktop`). New connections' public tokens are read from `/link/token/get` on the
+  server, so they never reach the window. In-page Link is still used in the browser.
+- **One running copy** (a second launch exits and focuses the first), app menu (DevTools only when
+  unpackaged), and **clean shutdown**: on quit the server runs its shutdown hooks (SQLite close,
+  WAL checkpointed; verified no `-wal`/`-shm` left) before exiting.
+- `--import-dev-secrets` (unpackaged only) copies `.env.local`'s Plaid keys and the Keychain key
+  into `safeStorage`, so the desktop app can open data from a dev checkout.
+
+**Packaging**
+- `electron-builder`: `app.asar` holds only `electron/` and `package.json`. The server and its
+  trimmed `node_modules` are copied to `Resources/server` by `scripts/after-pack.cjs`
+  (`extraResources` always drops `node_modules`, and SQLite's native file can't load from asar).
+- `scripts/build-desktop.mjs` builds the standalone server and **fails the build if any `.db`,
+  `.env*` or `data/` is in the output**. Verified the packaged app has no database, env file,
+  `secrets.json` or secret values.
+- Unsigned, arm64 only, default icon. About 340 MB (mostly the Electron framework).
+
+**Found along the way**
+- The build tracer copied the local database into the build twice: once via a literal default
+  `path.join(cwd, "data")` in config, and once via `path.join(DATA_DIR, "budget.db")`, which it turns
+  into a `*/budget.db` wildcard. `outputFileTracingExcludes` doesn't apply to instrumentation or proxy
+  traces. Fixes: config has no default data path (the dev launcher sets `DATA_DIR=./data`), and the
+  desktop bridge runs registered shutdown hooks instead of importing the database module.
+- The database now opens on first query, not at import, so `next build` no longer opens or migrates
+  the real database.
+
+**Left for later phases**
+- Phase 3: in-app setup and Settings to replace `--import-dev-secrets` (a fresh install has no
+  Plaid keys yet); optional `completion_redirect_uri` to bring the app forward after Hosted Link.
+- Phase 4: signing and notarization, icons, x64 and universal builds, Windows and Linux, trimming
+  unused server dependencies (e.g. `sharp`), release automation.

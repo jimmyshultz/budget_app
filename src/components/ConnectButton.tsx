@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { usePlaidLink } from "react-plaid-link";
-import { createLinkToken, exchangePublicToken, type ConnectKind } from "@/app/actions";
+import { useState, useTransition } from "react";
+import {
+  completeHostedConnect,
+  createHostedLink,
+  createLinkToken,
+  exchangePublicToken,
+  type ConnectKind,
+} from "@/app/actions";
+import type { SyncResult } from "@/lib/sync";
+import { PlaidOpener, useHostedLink, WaitingForBrowser } from "./plaidFlows";
 
 const LABELS: Record<ConnectKind, string> = {
   banking: "Bank or credit card",
@@ -10,48 +17,34 @@ const LABELS: Record<ConnectKind, string> = {
   loan: "Mortgage / loan",
 };
 
-export function ConnectButton() {
+function describe(result: SyncResult, kind: ConnectKind): string {
+  if (result.error) return `Connected, but sync failed: ${result.error}`;
+  return (
+    `Connected ${result.institution ?? "account"}: ${result.added} transactions imported.` +
+    (result.added === 0 && kind === "banking" ? " Plaid may still be loading history; press Sync in a minute." : "")
+  );
+}
+
+/** `hosted`: run Plaid in the system browser (desktop app) instead of in the page. */
+export function ConnectButton({ hosted }: { hosted: boolean }) {
   const [kind, setKind] = useState<ConnectKind>("banking");
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const hostedLink = useHostedLink();
 
-  const { open, ready } = usePlaidLink({
-    token: linkToken,
-    onSuccess: (publicToken, metadata) => {
-      setLinkToken(null);
-      if (!publicToken) {
-        setMessage("Plaid Link finished without returning a token. Try connecting again.");
-        return;
-      }
+  const startHosted = () =>
+    startTransition(async () => {
+      setMessage(null);
+      const outcome = await hostedLink.run(() => createHostedLink({ kind }));
+      if (outcome.state === "error") return setMessage(`Error: ${outcome.message}`);
+      if (outcome.state === "cancelled") return;
       setMessage("Connected. Pulling accounts and transactions…");
-      startTransition(async () => {
-        const res = await exchangePublicToken(publicToken, kind, {
-          id: metadata.institution?.institution_id ?? null,
-          name: metadata.institution?.name ?? null,
-        });
-        if (!res.ok) setMessage(`Error: ${res.error}`);
-        else if (res.data.error) setMessage(`Connected, but sync failed: ${res.data.error}`);
-        else
-          setMessage(
-            `Connected ${res.data.institution ?? "account"}: ${res.data.added} transactions imported.` +
-              (res.data.added === 0 && kind === "banking"
-                ? " Plaid may still be loading history; press Sync in a minute."
-                : ""),
-          );
-      });
-    },
-    onExit: (err) => {
-      setLinkToken(null);
-      if (err) setMessage(`Link closed: ${err.error_message}`);
-    },
-  });
+      const res = await completeHostedConnect(outcome.linkToken, kind);
+      setMessage(res.ok ? res.data.map((r) => describe(r, kind)).join(" ") : `Error: ${res.error}`);
+    });
 
-  useEffect(() => {
-    if (linkToken && ready) open();
-  }, [linkToken, ready, open]);
-
-  const start = () => {
+  const startInPage = () => {
     setMessage(null);
     startTransition(async () => {
       const res = await createLinkToken(kind);
@@ -75,13 +68,35 @@ export function ConnectButton() {
           ))}
         </select>
         <button
-          onClick={start}
-          disabled={pending}
+          onClick={hosted ? startHosted : startInPage}
+          disabled={pending || linkToken != null}
           className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {pending ? "Working…" : "Connect account"}
+          {pending && !hostedLink.waiting ? "Working…" : "Connect account"}
         </button>
       </div>
+      {hostedLink.waiting && <WaitingForBrowser onCancel={hostedLink.cancel} />}
+      {linkToken && (
+        <PlaidOpener
+          token={linkToken}
+          onSuccess={(publicToken, metadata) => {
+            setLinkToken(null);
+            if (!publicToken) return setMessage("Plaid Link finished without returning a token. Try connecting again.");
+            setMessage("Connected. Pulling accounts and transactions…");
+            startTransition(async () => {
+              const res = await exchangePublicToken(publicToken, kind, {
+                id: metadata.institution?.institution_id ?? null,
+                name: metadata.institution?.name ?? null,
+              });
+              setMessage(res.ok ? describe(res.data, kind) : `Error: ${res.error}`);
+            });
+          }}
+          onExit={(msg) => {
+            setLinkToken(null);
+            if (msg) setMessage(`Link closed: ${msg}`);
+          }}
+        />
+      )}
       {message && <p className="text-sm text-neutral-500">{message}</p>}
     </div>
   );

@@ -7,6 +7,7 @@ import { DisconnectButton } from "@/components/DisconnectButton";
 import { ReconnectButton } from "@/components/ReconnectButton";
 import { AddManualAccount, ManualBalance } from "@/components/ManualAccounts";
 import { ACCOUNT_SECTIONS, isLiability } from "@/lib/accounts";
+import { getConfig } from "@/lib/config";
 import { formatCents } from "@/lib/format";
 
 // Plaid errors that a fresh login through Link (update mode) resolves.
@@ -27,6 +28,8 @@ function needsLogin(error: string | null): boolean {
 
 export default async function AccountsPage() {
   await connection();
+  // The desktop app runs Plaid in the system browser: banks block logins in embedded browsers.
+  const hosted = getConfig().desktop;
   const items = db.select().from(schema.plaidItems).all();
   const accounts = db
     .select()
@@ -50,7 +53,7 @@ export default async function AccountsPage() {
           <p className="text-sm text-neutral-500">Net worth</p>
           <p className="text-3xl font-semibold tabular-nums">{formatCents(netWorth)}</p>
         </div>
-        <ConnectButton />
+        <ConnectButton hosted={hosted} />
       </section>
 
       {items.length > 0 && (
@@ -78,6 +81,7 @@ export default async function AccountsPage() {
                     itemId={i.id}
                     institution={i.institutionName ?? "this bank"}
                     needsLogin={needsLogin(i.lastError)}
+                    hosted={hosted}
                   />
                   <DisconnectButton itemId={i.id} institution={i.institutionName ?? "this connection"} />
                 </div>

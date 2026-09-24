@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local database (your financial data)
 /data/
+
+# desktop build output
+/dist-desktop/

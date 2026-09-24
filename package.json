@@ -14,7 +14,9 @@
     "reset-data": "node scripts/reset-data.mjs",
     "sync": "node scripts/run.mjs tsx --conditions=react-server scripts/sync.mts",
     "key:to-keychain": "node scripts/move-key-to-keychain.mjs",
-    "app": "npm run build && npm run start"
+    "app": "npm run build && npm run start",
+    "desktop": "node scripts/build-desktop.mjs && electron .",
+    "desktop:package": "node scripts/build-desktop.mjs && electron-builder --dir"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
@@ -33,10 +35,32 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.11",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "productName": "Budget",
+  "main": "electron/main.mjs",
+  "build": {
+    "appId": "com.budgetapp.desktop",
+    "productName": "Budget",
+    "directories": {
+      "output": "dist-desktop"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json",
+      "!**/node_modules/**"
+    ],
+    "mac": {
+      "category": "public.app-category.finance",
+      "target": "dir"
+    },
+    "npmRebuild": false,
+    "afterPack": "scripts/after-pack.cjs"
   }
 }

@@ -7,16 +7,21 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "./schema";
 import { DEFAULT_CATEGORIES } from "@/lib/categorize";
 import { getConfig } from "@/lib/config";
+import { onShutdown } from "@/lib/shutdown";
 
-const DATA_DIR = getConfig().dataDir;
-const DB_PATH = path.join(DATA_DIR, "budget.db");
+type Db = ReturnType<typeof drizzle<typeof schema>>;
 
-function open() {
-  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
-  const sqlite = new Database(DB_PATH);
-  fs.chmodSync(DB_PATH, 0o600);
+function open(): Db {
+  const dataDir = getConfig().dataDir;
+  if (!dataDir) {
+    throw new Error("No data folder configured. Start the app with the npm scripts, or set DATA_DIR.");
+  }
+  const dbPath = path.join(dataDir, "budget.db");
+  fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+  const sqlite = new Database(dbPath);
+  fs.chmodSync(dbPath, 0o600);
   sqlite.pragma("journal_mode = WAL");
-  // The background sync job and the web app can write at the same time; wait instead of failing.
+  // The terminal sync and the app can write at the same time; wait instead of failing.
   sqlite.pragma("busy_timeout = 5000");
   sqlite.pragma("foreign_keys = ON");
 
@@ -26,7 +31,7 @@ function open() {
   return db;
 }
 
-function seedCategories(db: ReturnType<typeof drizzle<typeof schema>>) {
+function seedCategories(db: Db) {
   const existing = db.select({ id: schema.categories.id }).from(schema.categories).limit(1).all();
   if (existing.length > 0) return;
   db.insert(schema.categories)
@@ -43,9 +48,34 @@ function seedCategories(db: ReturnType<typeof drizzle<typeof schema>>) {
     .run();
 }
 
-// Reuse one connection across hot reloads in dev.
-const globalForDb = globalThis as unknown as { db?: ReturnType<typeof open> };
-export const db = globalForDb.db ?? open();
-if (process.env.NODE_ENV !== "production") globalForDb.db = db;
+// One connection per process, kept on globalThis so dev hot reloads reuse it.
+const store = globalThis as unknown as { __budgetDb?: Db };
+
+function getDb(): Db {
+  if (!store.__budgetDb) {
+    store.__budgetDb = open();
+    onShutdown(closeDb);
+  }
+  return store.__budgetDb;
+}
+
+/**
+ * The database, opened on first use rather than at import. `next build` imports every page,
+ * and the desktop app only sends the data folder once the server has started, so opening
+ * eagerly would touch (or fail to find) the database at the wrong time.
+ */
+export const db = new Proxy({} as Db, {
+  get(_target, prop) {
+    const real = getDb();
+    const value = Reflect.get(real, prop, real);
+    return typeof value === "function" ? value.bind(real) : value;
+  },
+});
+
+/** Close the connection (checkpoints the WAL). Runs when the desktop app quits. */
+function closeDb() {
+  store.__budgetDb?.$client.close();
+  store.__budgetDb = undefined;
+}
 
 export { schema };

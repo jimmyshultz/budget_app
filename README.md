@@ -113,6 +113,19 @@ Your data is `data/budget.db` plus `.env.local`, and the encryption key is in yo
 An encrypted Time Machine backup covers all three. If the Keychain item is lost, your history,
 budgets and rules are kept, but each institution has to be reconnected.
 
+## Desktop app (work in progress)
+
+The app can also run as an Electron desktop app; see `PLAN.md` for the design and status.
+
+```bash
+npm run desktop -- --import-dev-secrets   # first run: copy this checkout's Plaid keys and key
+npm run desktop                            # build the server and open the app
+npm run desktop:package                    # unsigned Budget.app in dist-desktop/
+```
+
+The desktop app keeps its data and encrypted secrets in the OS per-user app-data folder
+(`~/Library/Application Support/Budget` on macOS), separate from this checkout's `data/`.
+
 ## Scripts
 
 | Command | What it does |
@@ -136,6 +149,7 @@ src/components/     UI components (charts, budget meters, Plaid Link buttons)
 src/db/             Drizzle schema and database setup
 src/lib/            Plaid client, sync, categorization, queries, encryption
 src/proxy.ts        localhost-only request guard
-scripts/            setup, sync, key migration and reset scripts
+scripts/            dev launcher, setup, sync, key migration, reset and desktop build scripts
+electron/           desktop app main process and encrypted secret storage
 drizzle/            SQL migrations
 ```

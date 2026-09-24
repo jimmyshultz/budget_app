@@ -1,70 +1,60 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { usePlaidLink } from "react-plaid-link";
-import { createReconnectLinkToken, finishReconnect } from "@/app/actions";
+import { useState, useTransition } from "react";
+import { createHostedLink, createReconnectLinkToken, finishReconnect } from "@/app/actions";
+import { PlaidOpener, useHostedLink, WaitingForBrowser } from "./plaidFlows";
 
-/** Opens Plaid Link as soon as it's mounted. Mounted only after a click, so each row doesn't load Link. */
-function PlaidOpener({
-  token,
-  onSuccess,
-  onExit,
-}: {
-  token: string;
-  onSuccess: () => void;
-  onExit: (message: string | null) => void;
-}) {
-  const { open, ready } = usePlaidLink({
-    token,
-    onSuccess: () => onSuccess(),
-    onExit: (err) => onExit(err ? err.display_message || err.error_message : null),
-  });
-  useEffect(() => {
-    if (ready) open();
-  }, [ready, open]);
-  return null;
-}
-
+/** `hosted`: run Plaid in the system browser (desktop app) instead of in the page. */
 export function ReconnectButton({
   itemId,
   institution,
   needsLogin,
+  hosted,
 }: {
   itemId: string;
   institution: string;
   needsLogin: boolean;
+  hosted: boolean;
 }) {
   const [token, setToken] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const hostedLink = useHostedLink();
+
+  const finish = async () => {
+    setMessage(`Reconnected ${institution}. Syncing…`);
+    const res = await finishReconnect(itemId);
+    if (!res.ok) setMessage(res.error);
+    else if (res.data.error) setMessage(`Reconnected, but sync failed: ${res.data.error}`);
+    else setMessage(`Reconnected · ${res.data.added} new transactions`);
+  };
 
   const start = () => {
     setMessage(null);
     startTransition(async () => {
+      if (hosted) {
+        const outcome = await hostedLink.run(() => createHostedLink({ itemId }));
+        if (outcome.state === "error") setMessage(outcome.message);
+        else if (outcome.state === "success") await finish();
+        return;
+      }
       const res = await createReconnectLinkToken(itemId);
       if (res.ok) setToken(res.data);
       else setMessage(res.error);
     });
   };
 
-  const done = () => {
-    setToken(null);
-    setMessage(`Reconnected ${institution}. Syncing…`);
-    startTransition(async () => {
-      const res = await finishReconnect(itemId);
-      if (!res.ok) setMessage(res.error);
-      else if (res.data.error) setMessage(`Reconnected, but sync failed: ${res.data.error}`);
-      else setMessage(`Reconnected · ${res.data.added} new transactions`);
-    });
-  };
-
   return (
     <span className="flex items-center gap-2">
       {message && <span className="text-xs text-ink-muted">{message}</span>}
+      {hostedLink.waiting && <WaitingForBrowser onCancel={hostedLink.cancel} />}
       {token && (
         <PlaidOpener
           token={token}
-          onSuccess={done}
+          onSuccess={() => {
+            setToken(null);
+            startTransition(finish);
+          }}
           onExit={(msg) => {
             setToken(null);
             if (msg) setMessage(msg);
@@ -81,7 +71,7 @@ export function ReconnectButton({
             : "text-sm text-ink-muted hover:text-foreground disabled:opacity-50"
         }
       >
-        {pending ? "Working…" : "Reconnect"}
+        {pending && !hostedLink.waiting ? "Working…" : "Reconnect"}
       </button>
     </span>
   );

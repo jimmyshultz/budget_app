@@ -23,9 +23,28 @@ const PRODUCTS: Record<ConnectKind, Products[]> = {
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
-export async function createLinkToken(kind: ConnectKind): Promise<Result<string>> {
+type LinkOptions = { kind: ConnectKind } | { itemId: string };
+
+/**
+ * Link token for a new connection ({ kind }) or for Plaid's update mode ({ itemId }): re-log
+ * into a bank for an existing connection (e.g. after ITEM_LOGIN_REQUIRED) or add/remove accounts
+ * there, keeping the item and all its history. `hosted` asks for a Hosted Link URL to open in the
+ * system browser (the desktop app, since banks block logins inside embedded browsers).
+ */
+async function createLink(options: LinkOptions, hosted: boolean): Promise<Result<{ linkToken: string; url?: string }>> {
   if (!plaidConfigured()) {
     return { ok: false, error: "Plaid keys missing. Add your Plaid client ID and secret." };
+  }
+  let modeFields;
+  if ("itemId" in options) {
+    const item = db.select().from(schema.plaidItems).where(eq(schema.plaidItems.id, options.itemId)).get();
+    if (!item) return { ok: false, error: "Connection not found." };
+    modeFields = { access_token: decrypt(item.accessTokenEnc), update: { account_selection_enabled: true } };
+  } else {
+    modeFields = {
+      products: PRODUCTS[options.kind],
+      ...(options.kind === "banking" ? { transactions: { days_requested: 730 } } : {}),
+    };
   }
   try {
     const { data } = await getPlaid().linkTokenCreate({
@@ -33,33 +52,83 @@ export async function createLinkToken(kind: ConnectKind): Promise<Result<string>
       language: "en",
       country_codes: [CountryCode.Us],
       user: { client_user_id: "local-user" },
-      products: PRODUCTS[kind],
-      ...(kind === "banking" ? { transactions: { days_requested: 730 } } : {}),
+      ...modeFields,
+      ...(hosted ? { hosted_link: {} } : {}),
     });
-    return { ok: true, data: data.link_token };
+    if (hosted && !data.hosted_link_url) return { ok: false, error: "Plaid did not return a hosted link URL." };
+    return { ok: true, data: { linkToken: data.link_token, url: data.hosted_link_url } };
   } catch (err) {
     return { ok: false, error: plaidErrorMessage(err) };
   }
 }
 
+/** In-page Plaid Link (browser). */
+export async function createLinkToken(kind: ConnectKind): Promise<Result<string>> {
+  const res = await createLink({ kind }, false);
+  return res.ok ? { ok: true, data: res.data.linkToken } : res;
+}
+
+export async function createReconnectLinkToken(itemId: string): Promise<Result<string>> {
+  const res = await createLink({ itemId }, false);
+  return res.ok ? { ok: true, data: res.data.linkToken } : res;
+}
+
+export type HostedLink = { linkToken: string; url: string };
+
+/** Hosted Link (desktop app): Plaid runs in the system browser and the app polls for the result. */
+export async function createHostedLink(options: LinkOptions): Promise<Result<HostedLink>> {
+  const res = await createLink(options, true);
+  return res.ok ? { ok: true, data: { linkToken: res.data.linkToken, url: res.data.url! } } : res;
+}
+
+export type HostedStatus = { state: "waiting" } | { state: "success" } | { state: "exited"; message: string };
+
+/** Whether the Hosted Link session has finished. Finished without an exit means success. */
+export async function checkHostedSession(linkToken: string): Promise<Result<HostedStatus>> {
+  try {
+    const { data } = await getPlaid().linkTokenGet({ link_token: linkToken });
+    const session = data.link_sessions?.find((s) => s.finished_at);
+    if (!session) return { ok: true, data: { state: "waiting" } };
+    if (session.exit) {
+      const message =
+        session.exit.error?.display_message || session.exit.error?.error_message || "Closed before finishing.";
+      return { ok: true, data: { state: "exited", message } };
+    }
+    return { ok: true, data: { state: "success" } };
+  } catch (err) {
+    return { ok: false, error: plaidErrorMessage(err) };
+  }
+}
+
+/** Save a new connection from a public token and pull its data. */
+async function addConnection(
+  publicToken: string,
+  kind: ConnectKind,
+  institution: { id: string | null; name: string | null },
+): Promise<SyncResult> {
+  const { data } = await getPlaid().itemPublicTokenExchange({ public_token: publicToken });
+  db.insert(schema.plaidItems)
+    .values({
+      id: data.item_id,
+      accessTokenEnc: encrypt(data.access_token),
+      institutionId: institution.id,
+      institutionName: institution.name,
+      products: PRODUCTS[kind].join(","),
+    })
+    .onConflictDoNothing()
+    .run();
+  const item = db.select().from(schema.plaidItems).where(eq(schema.plaidItems.id, data.item_id)).get()!;
+  return syncItem(item);
+}
+
+/** In-page Plaid Link success. */
 export async function exchangePublicToken(
   publicToken: string,
   kind: ConnectKind,
   institution: { id: string | null; name: string | null },
 ): Promise<Result<SyncResult>> {
   try {
-    const { data } = await getPlaid().itemPublicTokenExchange({ public_token: publicToken });
-    db.insert(schema.plaidItems)
-      .values({
-        id: data.item_id,
-        accessTokenEnc: encrypt(data.access_token),
-        institutionId: institution.id,
-        institutionName: institution.name,
-        products: PRODUCTS[kind].join(","),
-      })
-      .run();
-    const item = db.select().from(schema.plaidItems).where(eq(schema.plaidItems.id, data.item_id)).get()!;
-    const result = await syncItem(item);
+    const result = await addConnection(publicToken, kind, institution);
     revalidatePath("/", "layout");
     return { ok: true, data: result };
   } catch (err) {
@@ -68,23 +137,25 @@ export async function exchangePublicToken(
 }
 
 /**
- * Link token for Plaid's update mode: re-log into a bank for an existing connection
- * (e.g. after ITEM_LOGIN_REQUIRED) or add/remove accounts at that bank. The item and
- * all its history are kept; no token exchange is needed afterwards.
+ * Hosted Link success for a new connection. The public token is read from Plaid here on the
+ * server, so it never passes through the window.
  */
-export async function createReconnectLinkToken(itemId: string): Promise<Result<string>> {
-  const item = db.select().from(schema.plaidItems).where(eq(schema.plaidItems.id, itemId)).get();
-  if (!item) return { ok: false, error: "Connection not found." };
+export async function completeHostedConnect(linkToken: string, kind: ConnectKind): Promise<Result<SyncResult[]>> {
   try {
-    const { data } = await getPlaid().linkTokenCreate({
-      client_name: "Budget App",
-      language: "en",
-      country_codes: [CountryCode.Us],
-      user: { client_user_id: "local-user" },
-      access_token: decrypt(item.accessTokenEnc),
-      update: { account_selection_enabled: true },
-    });
-    return { ok: true, data: data.link_token };
+    const { data } = await getPlaid().linkTokenGet({ link_token: linkToken });
+    const added = (data.link_sessions ?? []).flatMap((s) => s.results?.item_add_results ?? []);
+    if (added.length === 0) return { ok: false, error: "Plaid reported no new connection." };
+    const results: SyncResult[] = [];
+    for (const r of added) {
+      results.push(
+        await addConnection(r.public_token, kind, {
+          id: r.institution?.institution_id ?? null,
+          name: r.institution?.name ?? null,
+        }),
+      );
+    }
+    revalidatePath("/", "layout");
+    return { ok: true, data: results };
   } catch (err) {
     return { ok: false, error: plaidErrorMessage(err) };
   }

@@ -14,8 +14,10 @@ const nextConfig: NextConfig = {
   output: process.env.BUILD_STANDALONE === "1" ? "standalone" : undefined,
   // Migrations are read from disk at startup, so the tracer can't see them.
   outputFileTracingIncludes: { "/*": ["./drizzle/**/*"] },
-  // NEVER ship local data or secrets: the tracer sees path.join(cwd, "data") and would copy the database.
-  outputFileTracingExcludes: { "/*": ["./data/**/*", "./.env*"] },
+  // NEVER ship local data or secrets: the tracer sees path.join(cwd, "data") in the config module
+  // and would copy the database. "**" covers every entry, including proxy and instrumentation.
+  // scripts/build-desktop.mjs double-checks the output.
+  outputFileTracingExcludes: { "**": ["./data/**/*", "./.env*"] },
 };
 
 export default nextConfig;
