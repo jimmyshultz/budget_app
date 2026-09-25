@@ -53,3 +53,27 @@ export function getConfig(): AppConfig {
 export function setConfig(values: Partial<AppConfig>) {
   store.__budgetConfigOverrides = { ...store.__budgetConfigOverrides, ...values };
 }
+
+/** Settings a user can change from the app (Settings / first-run setup). */
+export type EditableSettings = Pick<AppConfig, "plaidClientId" | "plaidSecret" | "plaidEnv">;
+
+type Persister = (values: EditableSettings) => Promise<void>;
+const persistStore = globalThis as unknown as { __budgetSettingsPersister?: Persister };
+
+/** Registered by the desktop app, which stores settings in the OS keychain. */
+export function setSettingsPersister(persister: Persister) {
+  persistStore.__budgetSettingsPersister = persister;
+}
+
+/** False when running from source: settings come from .env.local and can't be saved in-app. */
+export function canSaveSettings(): boolean {
+  return Boolean(persistStore.__budgetSettingsPersister);
+}
+
+/** Persist settings (desktop: OS keychain), then apply them to the running server. */
+export async function saveSettings(values: EditableSettings) {
+  const persister = persistStore.__budgetSettingsPersister;
+  if (!persister) throw new Error("Settings can't be saved here. Edit .env.local instead.");
+  await persister(values);
+  setConfig(values);
+}

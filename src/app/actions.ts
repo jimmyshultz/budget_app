@@ -5,10 +5,11 @@ import { revalidatePath } from "next/cache";
 import { CountryCode, Products } from "plaid";
 import { db, schema } from "@/db";
 import { isManualKind } from "@/lib/accounts";
+import { canSaveSettings, getConfig, saveSettings, type EditableSettings } from "@/lib/config";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { parseDollars } from "@/lib/format";
 import { addMonths, parseMonth } from "@/lib/months";
-import { getPlaid, plaidConfigured, plaidErrorMessage } from "@/lib/plaid";
+import { getPlaid, plaidClientFor, plaidConfigured, plaidErrorMessage } from "@/lib/plaid";
 import { syncAll, syncItem, type SyncResult } from "@/lib/sync";
 
 export type ConnectKind = "banking" | "investments" | "loan";
@@ -185,22 +186,111 @@ export async function syncIfStale(): Promise<SyncResult[] | null> {
   return stale ? syncNow() : null;
 }
 
-export async function disconnectItem(itemId: string): Promise<Result<null>> {
-  const item = db.select().from(schema.plaidItems).where(eq(schema.plaidItems.id, itemId)).get();
-  if (!item) return { ok: false, error: "Connection not found." };
+/**
+ * Remove a connection on Plaid's side (frees it from your plan's limit) and delete it here,
+ * with its accounts and transactions. With `strict`, a Plaid error stops the removal; without,
+ * it's best-effort and the local data is deleted regardless. Returns an error message or null.
+ */
+async function removeConnection(item: typeof schema.plaidItems.$inferSelect, strict: boolean): Promise<string | null> {
   try {
-    // Frees the connection on Plaid's side (it counts toward your plan's limit).
     await getPlaid().itemRemove({ access_token: decrypt(item.accessTokenEnc) });
   } catch (err) {
     const message = plaidErrorMessage(err);
     // Already gone on Plaid's side (e.g. a Sandbox item after switching to Production): just clean up locally.
-    if (!/ITEM_NOT_FOUND|INVALID_ACCESS_TOKEN/.test(message)) {
-      return { ok: false, error: message };
-    }
+    if (strict && !/ITEM_NOT_FOUND|INVALID_ACCESS_TOKEN/.test(message)) return message;
   }
-  db.delete(schema.plaidItems).where(eq(schema.plaidItems.id, itemId)).run();
+  db.delete(schema.plaidItems).where(eq(schema.plaidItems.id, item.id)).run();
+  return null;
+}
+
+export async function disconnectItem(itemId: string): Promise<Result<null>> {
+  const item = db.select().from(schema.plaidItems).where(eq(schema.plaidItems.id, itemId)).get();
+  if (!item) return { ok: false, error: "Connection not found." };
+  const error = await removeConnection(item, true);
+  if (error) return { ok: false, error };
   revalidatePath("/", "layout");
   return { ok: true, data: null };
+}
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+
+type KeysInput = { clientId: string; secret: string; env: string };
+
+/** Blank secret means "keep the saved one". */
+function resolveKeys(input: KeysInput): Result<EditableSettings> {
+  const clientId = input.clientId.trim();
+  const secret = input.secret.trim() || getConfig().plaidSecret;
+  if (input.env !== "sandbox" && input.env !== "production") return { ok: false, error: "Pick Sandbox or Production." };
+  if (!clientId) return { ok: false, error: "Enter your Plaid client ID." };
+  if (!secret) return { ok: false, error: "Enter your Plaid secret." };
+  return { ok: true, data: { plaidClientId: clientId, plaidSecret: secret, plaidEnv: input.env } };
+}
+
+/** Check keys against Plaid without saving them (creates a throwaway link token). */
+async function checkKeys(keys: EditableSettings): Promise<string | null> {
+  try {
+    await plaidClientFor(keys.plaidClientId, keys.plaidSecret, keys.plaidEnv).linkTokenCreate({
+      client_name: "Budget App",
+      language: "en",
+      country_codes: [CountryCode.Us],
+      user: { client_user_id: "local-user" },
+      products: [Products.Transactions],
+    });
+    return null;
+  } catch (err) {
+    const message = plaidErrorMessage(err);
+    return message.startsWith("INVALID_API_KEYS")
+      ? `Plaid rejected these keys. Check that the secret is the ${keys.plaidEnv === "production" ? "Production" : "Sandbox"} one.`
+      : message;
+  }
+}
+
+export async function testPlaidKeys(input: KeysInput): Promise<Result<null>> {
+  const keys = resolveKeys(input);
+  if (!keys.ok) return keys;
+  const error = await checkKeys(keys.data);
+  return error ? { ok: false, error } : { ok: true, data: null };
+}
+
+export type SaveSettingsResult =
+  | { ok: true }
+  | { ok: false; error: string }
+  | { ok: false; confirmDisconnect: number; error: string };
+
+/**
+ * Save Plaid keys. Connections belong to one Plaid account and environment, so switching either
+ * needs `confirmDisconnect`: existing connections are removed (with their transactions; budgets,
+ * rules and manual accounts are kept).
+ */
+export async function saveSettingsAction(input: KeysInput & { confirmDisconnect?: boolean }): Promise<SaveSettingsResult> {
+  if (!canSaveSettings()) return { ok: false, error: "Running from source: edit .env.local instead." };
+  const keys = resolveKeys(input);
+  if (!keys.ok) return keys;
+  const testError = await checkKeys(keys.data);
+  if (testError) return { ok: false, error: testError };
+
+  const current = getConfig();
+  const items = db.select().from(schema.plaidItems).all();
+  const accountChanged =
+    items.length > 0 &&
+    (current.plaidEnv !== keys.data.plaidEnv || current.plaidClientId !== keys.data.plaidClientId);
+  if (accountChanged && !input.confirmDisconnect) {
+    return {
+      ok: false,
+      confirmDisconnect: items.length,
+      error: "Your existing connections only work with the current Plaid account and environment.",
+    };
+  }
+  // Remove with the current (old) keys before switching, so they're freed on Plaid's side.
+  if (accountChanged) for (const item of items) await removeConnection(item, false);
+
+  try {
+    await saveSettings(keys.data);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
 }
 
 // Manual accounts are rows in `accounts` with no Plaid item. Only those can be edited here.

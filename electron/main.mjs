@@ -13,7 +13,7 @@ import net from "node:net";
 import path from "node:path";
 import { parseEnv } from "node:util";
 import { app, BrowserWindow, dialog, Menu, session, shell, utilityProcess } from "electron";
-import { loadOrInitSecrets, saveSecrets } from "./secrets.mjs";
+import { loadOrInitSecrets, loadSecrets, saveSecrets } from "./secrets.mjs";
 
 const DEV_ROOT = path.join(import.meta.dirname, "..");
 const TOKEN_COOKIE = "budget_token"; // keep in sync with src/proxy.ts
@@ -41,6 +41,10 @@ const serverEntry = () =>
 let server = null;
 let mainWindow = null;
 let quitting = false;
+
+// Development only: BUDGET_USER_DATA=<folder> runs against a separate profile (data + secrets),
+// e.g. to try the first-run experience without touching your real desktop data.
+if (!app.isPackaged && process.env.BUDGET_USER_DATA) app.setPath("userData", process.env.BUDGET_USER_DATA);
 
 // ─── One running copy ────────────────────────────────────────────────────────
 if (!app.requestSingleInstanceLock()) {
@@ -142,6 +146,17 @@ async function startServer({ port, appToken, secrets }) {
     server = null;
     if (!quitting) fail(new Error(`The app's server stopped unexpectedly (exit code ${code}).`));
   });
+  // Settings changed in the app (Settings / first-run setup): store them with safeStorage.
+  child.on("message", (message) => {
+    if (message?.type !== "save-settings") return;
+    try {
+      const { plaidClientId, plaidSecret, plaidEnv } = message.values;
+      saveSecrets({ ...loadSecrets(), plaidClientId, plaidSecret, plaidEnv });
+      child.postMessage({ type: "settings-saved", id: message.id });
+    } catch (err) {
+      child.postMessage({ type: "settings-saved", id: message.id, error: String(err?.message ?? err) });
+    }
+  });
 
   await waitForMessage(child, "ready", 20000);
   child.postMessage({
@@ -161,7 +176,7 @@ async function startServer({ port, appToken, secrets }) {
 }
 
 // ─── Window ──────────────────────────────────────────────────────────────────
-async function createWindow(origin, appToken) {
+async function createWindow(origin, appToken, startPath) {
   const ses = session.defaultSession;
 
   // Deny camera, microphone, notifications, geolocation, etc.
@@ -202,7 +217,8 @@ async function createWindow(origin, appToken) {
   win.webContents.on("will-attach-webview", (event) => event.preventDefault());
   win.on("closed", () => (mainWindow = null));
 
-  await win.loadURL(origin);
+  await win.loadURL(origin + startPath);
+  console.log(`[desktop] opened ${startPath}`);
   return win;
 }
 
@@ -241,7 +257,9 @@ async function start() {
 
   buildMenu();
   server = await startServer({ port, appToken, secrets });
-  mainWindow = await createWindow(`http://127.0.0.1:${port}`, appToken);
+  // First run (no Plaid keys yet) opens the setup page.
+  const startPath = secrets.plaidClientId && secrets.plaidSecret ? "/" : "/setup";
+  mainWindow = await createWindow(`http://127.0.0.1:${port}`, appToken, startPath);
 }
 
 // Single-window app: closing the window quits, on every platform.

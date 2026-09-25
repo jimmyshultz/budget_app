@@ -1,22 +1,24 @@
 import "server-only";
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
-import { getConfig } from "./config";
+import { getConfig, type PlaidEnv } from "./config";
 
 let cached: { key: string; client: PlaidApi } | null = null;
+
+/** A Plaid client for specific credentials (e.g. to test keys before saving them). */
+export function plaidClientFor(clientId: string, secret: string, env: PlaidEnv): PlaidApi {
+  return new PlaidApi(
+    new Configuration({
+      basePath: PlaidEnvironments[env],
+      baseOptions: { headers: { "PLAID-CLIENT-ID": clientId, "PLAID-SECRET": secret } },
+    }),
+  );
+}
 
 /** Plaid client for the current settings; rebuilt if the keys or environment change. */
 export function getPlaid(): PlaidApi {
   const { plaidClientId, plaidSecret, plaidEnv } = getConfig();
   const key = `${plaidEnv}:${plaidClientId}:${plaidSecret}`;
-  if (cached?.key !== key) {
-    const client = new PlaidApi(
-      new Configuration({
-        basePath: PlaidEnvironments[plaidEnv],
-        baseOptions: { headers: { "PLAID-CLIENT-ID": plaidClientId, "PLAID-SECRET": plaidSecret } },
-      }),
-    );
-    cached = { key, client };
-  }
+  if (cached?.key !== key) cached = { key, client: plaidClientFor(plaidClientId, plaidSecret, plaidEnv) };
   return cached.client;
 }
 

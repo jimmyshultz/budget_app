@@ -4,7 +4,8 @@ import { connection } from "next/server";
 import { min } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { SyncButton } from "@/components/SyncButton";
-import { getPlaidEnv } from "@/lib/plaid";
+import { SetupBanner } from "@/components/SetupBanner";
+import { getPlaidEnv, plaidConfigured } from "@/lib/plaid";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ const NAV = [
   { href: "/transactions", label: "Transactions" },
   { href: "/accounts", label: "Accounts" },
   { href: "/rules", label: "Rules" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
@@ -49,6 +51,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <SyncButton lastSyncedAt={lastSyncedAt} />
           </div>
         </header>
+        {!plaidConfigured() && <SetupBanner />}
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">{children}</main>
       </body>
     </html>
