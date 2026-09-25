@@ -182,6 +182,7 @@ npm run desktop                            # build the server and open the app
 npm run desktop -- --import-dev-secrets    # optional: reuse this checkout's Plaid keys and key
 npm run desktop:package                    # arm64 + x64 .dmg in dist-desktop/
 npm run desktop:package:dir                # just the .app, for quick local testing
+npx electron scripts/docs-screenshots.mjs  # regenerate docs/images/ (fake data, after a desktop build)
 ```
 
 Releases are built by GitHub Actions (`.github/workflows/release.yml`): bump `version` in

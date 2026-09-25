@@ -22,9 +22,17 @@ Sandbox is Plaid's test environment. Every bank in it is fake, so it's a safe wa
 3. In Budget, enter them on the setup page (or **Settings**), choose **Sandbox**, and click **Save**.
    Running from source instead? Put them in `.env.local` as `PLAID_CLIENT_ID` and `PLAID_SECRET`
    with `PLAID_ENV=sandbox`.
+
+   <img src="images/setup.png" width="520" alt="Budget's first-run setup page: step 1 links to the Plaid dashboard, step 2 has Client ID and Secret fields, a Sandbox or Production choice, and Save and Test keys buttons.">
+
 4. On **Accounts**, click **Connect account**. Plaid opens in your browser. Pick any bank and log in
    with `user_good` / `pass_good`. For a larger, more realistic data set, use
    `user_transactions_dynamic` with any password.
+
+   <img src="images/accounts.png" width="700" alt="The Accounts page: a connection-type menu set to Bank or credit card, a green Connect account button, and a connected Sandbox bank with Reconnect and Disconnect links.">
+
+   Choose the connection type in the menu first: **Bank or credit card**, **Investments** or
+   **Mortgage / loan**. While you're on Sandbox, the top bar shows a **Plaid sandbox** badge.
 
 ## 3. Get Production access (your real accounts)
 
@@ -53,6 +61,9 @@ Sandbox is Plaid's test environment. Every bank in it is fake, so it's a safe wa
    and manual accounts are kept.
    From source: stop the app, run `npm run reset-data -- --yes`, then set `PLAID_ENV=production`
    and the Production `PLAID_SECRET` in `.env.local`.
+
+   <img src="images/settings-production.png" width="520" alt="The Plaid section of Settings with Production selected. The Secret field says Saved, leave blank to keep it, above Save and Test keys buttons.">
+
 3. Connect each bank **once**. To add more accounts from a bank you've already connected, use
    **Reconnect** on that connection instead of connecting it again. That avoids using up another
    connection.
