@@ -1,0 +1,58 @@
+name: Bug report
+description: Something doesn't work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Don't paste real financial data.** Leave out Plaid keys, access tokens, account numbers,
+        balances, transaction details and bank names you'd rather keep private. Screenshots are
+        fine if you blur amounts and names. Security problems go through the private
+        [vulnerability report](https://github.com/jimmyshultz/budget_app/security/advisories/new) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to Budget
+        2. Click …
+  - type: dropdown
+    id: how
+    attributes:
+      label: How are you running Budget?
+      options:
+        - Desktop app (Apple Silicon)
+        - Desktop app (Intel)
+        - From source
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Budget version
+      description: From the Releases page you downloaded, or the commit if running from source.
+  - type: input
+    id: os
+    attributes:
+      label: macOS version (or other OS)
+  - type: dropdown
+    id: env
+    attributes:
+      label: Plaid environment
+      options:
+        - Sandbox
+        - Production
+        - Not set up / not related to Plaid
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages
+      description: Any error shown in the app or terminal. Check it for keys, tokens or account details first.
+      render: text

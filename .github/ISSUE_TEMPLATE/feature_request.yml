@@ -1,0 +1,20 @@
+name: Feature request
+description: An idea for making Budget better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The problem or goal, in your own words.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: How you'd like it to work, if you have an idea.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do today instead?

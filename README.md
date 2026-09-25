@@ -1,11 +1,16 @@
-# Budget App
+# Budget
 
-A self-hosted personal budgeting app in the spirit of Mint. It pulls accounts and transactions
-through [Plaid](https://plaid.com), categorizes transactions automatically, and lets you plan a
-monthly budget (income and spending) and track it as the month goes.
+A personal budgeting app in the spirit of Mint. It pulls in your accounts and transactions through
+[Plaid](https://plaid.com), categorizes transactions automatically, and lets you plan a monthly
+budget (income and spending) and track it as the month goes.
 
-It runs **only on your own machine**, at `http://127.0.0.1:3000`. Your data lives in a local SQLite
-file and leaves the machine only through the app's own API calls to Plaid.
+It runs **only on your own computer**. There's no Budget server or account: your data lives in a
+local SQLite file, and the only outside service the app talks to is Plaid, using keys from your own
+free Plaid account.
+
+- **Just want to use it?** [Download the macOS app](#install-the-desktop-app-macos), then follow the
+  [Plaid setup guide](docs/plaid-setup.md).
+- **Developer?** [Run it from source](#run-from-source) on macOS, Linux or Windows.
 
 ## Features
 
@@ -21,17 +26,45 @@ file and leaves the machine only through the app's own API calls to Plaid.
 - **Connection management:** reconnect when a bank asks you to log in again (history is kept), or
   disconnect.
 
-## Requirements
+## Install the desktop app (macOS)
+
+Download the `.dmg` for your Mac from the [Releases page](https://github.com/jimmyshultz/budget_app/releases/latest):
+
+- **Apple Silicon** (M1 or later): `Budget-<version>-arm64.dmg`
+- **Intel**: `Budget-<version>-x64.dmg`
+
+Open it and drag **Budget** to Applications. The app isn't signed with an Apple Developer ID yet,
+so the first time you open it macOS will say it can't verify the developer:
+
+1. Try to open Budget once, then click **Done** (not Move to Trash).
+2. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to
+   the message about Budget. Confirm with your password or Touch ID.
+3. After that it opens normally.
+
+Because the app isn't Developer ID-signed, macOS treats each new version as a different app. After
+an update you'll see *"Budget wants to use your confidential information stored in 'Budget Safe
+Storage' in your keychain"*. Enter your password and click **Always Allow** (not **Allow**) and it
+won't ask again until the next update. The app waits while that prompt is open.
+
+On first launch, Budget walks you through entering your Plaid keys; the
+[Plaid setup guide](docs/plaid-setup.md) covers getting them, including Production access for your real accounts. Its data lives in
+`~/Library/Application Support/Budget`; see [Backups](#backups).
+
+## Run from source
+
+From source, the app runs in your browser at `http://127.0.0.1:3000`.
+
+### Requirements
 
 - macOS, Linux or Windows. On macOS the encryption key is kept in the login Keychain; elsewhere it
   goes in `.env.local` (see [Security](#security)).
 - Node.js 22 or later
 - A Plaid account (free to sign up; Sandbox is free)
 
-## Setup
+### Setup
 
 1. Sign up at https://dashboard.plaid.com and copy your **client ID** and **Sandbox secret** from
-   Developers → Keys.
+   Developers → Keys (details in the [Plaid setup guide](docs/plaid-setup.md)).
 2. Install and initialize:
    ```bash
    npm install
@@ -48,17 +81,16 @@ file and leaves the machine only through the app's own API calls to Plaid.
    `user_good` / `pass_good`. For a larger, more realistic data set, use `user_transactions_dynamic`
    with any password.
 
-## Using real accounts
+### Using real accounts
 
-1. In the Plaid dashboard, request Production access for the products you need (below). Some
-   institutions also require Plaid's OAuth registration, which is approved separately. Check the
-   dashboard's OAuth page.
-2. Stop the app and clear the Sandbox data (Sandbox connections don't work with Production keys):
+See the [Plaid setup guide](docs/plaid-setup.md) for requesting Production access. Then:
+
+1. Stop the app and clear the Sandbox data (Sandbox connections don't work with Production keys):
    ```bash
    npm run reset-data -- --yes
    ```
-3. In `.env.local`, set `PLAID_ENV=production` and replace `PLAID_SECRET` with your Production secret.
-4. Run `npm run app` and connect each institution **once**. Each connection typically counts toward
+2. In `.env.local`, set `PLAID_ENV=production` and replace `PLAID_SECRET` with your Production secret.
+3. Run `npm run app` and connect each institution **once**. Each connection typically counts toward
    your Plaid plan's limit. To add accounts from an institution you've already connected, use
    **Reconnect** rather than connecting it again.
 
@@ -87,7 +119,7 @@ If an institution can't be connected, add it on **Accounts** as a manual account
   positive = money out.
 - **Configuration** (`src/lib/config.ts`): the only place the server reads settings. Values come
   from environment variables (`DATA_DIR`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`,
-  `TOKEN_ENCRYPTION_KEY`) or from `setConfig()`, which the desktop app will use. The npm scripts
+  `TOKEN_ENCRYPTION_KEY`) or from `setConfig()`, which the desktop app uses. The npm scripts
   start everything through `scripts/run.mjs`, which keeps `.next/` private and, on macOS, loads the
   encryption key from the Keychain.
 - **Schema changes:** edit `src/db/schema.ts` and run `npm run db:generate`. Migrations in
@@ -95,11 +127,16 @@ If an institution can't be connected, add it on **Accounts** as a manual account
 
 ## Security
 
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
 - The server listens on `127.0.0.1` only, and `src/proxy.ts` rejects any request whose `Host`
   isn't localhost (DNS-rebinding protection). Server actions also get Next.js's origin checks.
 - Plaid access tokens are encrypted in the database with AES-256-GCM. On macOS the key is kept in
   the login Keychain (service `budget_app`), not in the repo, the database or `.env.local`. On other
   systems it's `TOKEN_ENCRYPTION_KEY` (64 hex characters) in `.env.local`.
+- The desktop app keeps its Plaid keys and encryption key encrypted with the OS keychain (Electron
+  `safeStorage`), runs the server on a random port, and requires a per-launch token on every request.
+  Its window is sandboxed and bank logins open in your regular browser.
 - `data/` and `.env.local` are git-ignored and created with owner-only permissions. Turbopack's
   on-disk cache is turned off because it snapshots environment variables (including secrets), and
   `.next/` is kept owner-only.
@@ -109,36 +146,18 @@ If an institution can't be connected, add it on **Accounts** as a manual account
 
 ## Backups
 
-Your data is `data/budget.db` plus `.env.local`, and the encryption key is in your login Keychain.
-An encrypted Time Machine backup covers all three. If the Keychain item is lost, your history,
-budgets and rules are kept, but each institution has to be reconnected.
+- **Desktop app:** **Settings → Download a backup** saves a copy of your database. Everything lives
+  in `~/Library/Application Support/Budget`, and the encryption key is in your login Keychain, so an
+  encrypted Time Machine backup covers it all.
+- **From source:** your data is `data/budget.db` plus `.env.local`, and on macOS the encryption key
+  is in your login Keychain. An encrypted Time Machine backup covers all three.
 
-## Installing the desktop app (macOS)
-
-Download the `.dmg` for your Mac from the GitHub Releases page:
-
-- **Apple Silicon** (M1 or later): `Budget-<version>-arm64.dmg`
-- **Intel**: `Budget-<version>-x64.dmg`
-
-Open it and drag **Budget** to Applications. The app isn't signed with an Apple Developer ID yet,
-so the first time you open it macOS will say it can't verify the developer:
-
-1. Try to open Budget once, then click **Done** (not Move to Trash).
-2. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to
-   the message about Budget. Confirm with your password or Touch ID.
-3. After that it opens normally.
-
-Because the app isn't Developer ID-signed, macOS treats each new version as a different app. After
-an update you'll see *"Budget wants to use your confidential information stored in 'Budget Safe
-Storage' in your keychain"*. Enter your password and click **Always Allow** (not **Allow**) and it
-won't ask again until the next update. The app waits while that prompt is open.
-
-On first launch, Budget walks you through entering your Plaid keys. Its data lives in
-`~/Library/Application Support/Budget`; see [Backups](#backups).
+If the encryption key is lost, your history, budgets and rules are kept, but each bank has to be
+reconnected.
 
 ## Desktop app development
 
-The app can also run as an Electron desktop app; see `PLAN.md` for the design and status.
+The desktop app is Electron around the same Next.js server; see `PLAN.md` for the design.
 
 ```bash
 npm run desktop                            # build the server and open the app
@@ -185,3 +204,13 @@ scripts/            dev launcher, setup, sync, key migration, reset and desktop 
 electron/           desktop app main process and encrypted secret storage
 drizzle/            SQL migrations
 ```
+
+## Contributing
+
+Issues and pull requests are welcome. Run `npm run typecheck` and `npm run lint` before opening a
+pull request, and never include real financial data, Plaid keys or access tokens in issues, pull
+requests, screenshots or test fixtures.
+
+## License
+
+[MIT](LICENSE)

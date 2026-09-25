@@ -94,7 +94,9 @@ accounts by institution and the last 4 digits of the account number, so history 
 
 ## Phase 0 results
 
-_In progress._
+Done. The Next.js server and SQLite run inside Electron, and `safeStorage` works. One large bank
+refused to log in inside the embedded window (it only supports mainstream browsers), so bank logins
+use Plaid Hosted Link in the default browser instead, which worked.
 
 ## Phase 1 results (make it portable)
 
@@ -148,7 +150,7 @@ builds an unsigned `dist-desktop/mac-arm64/Budget.app`, which launches and works
 
 **Packaging**
 - `electron-builder`: `app.asar` holds only `electron/` and `package.json`. The server and its
-  trimmed `node_modules` are copied to `Resources/server` by `scripts/after-pack.cjs`
+  trimmed `node_modules` are copied to `Resources/server` by `scripts/after-pack.mjs`
   (`extraResources` always drops `node_modules`, and SQLite's native file can't load from asar).
 - `scripts/build-desktop.mjs` builds the standalone server and **fails the build if any `.db`,
   `.env*` or `data/` is in the output**. Verified the packaged app has no database, env file,
@@ -229,8 +231,10 @@ blocks until it's answered. Users should click **Always Allow**; it returns afte
 Developer ID signing removes this (Keychain trusts any build from the same team). The Intel build
 "hung" under Rosetta only while that prompt was waiting; it isn't otherwise broken.
 
-**Not verified:** the Intel build on real Intel hardware (only under Rosetta); the GitHub Actions
-workflow hasn't run yet.
+**CI verified:** a manual run of the workflow built both installers (typecheck now runs
+`next typegen` first, since a fresh checkout has no generated route types).
+
+**Not verified:** the Intel build on real Intel hardware (only under Rosetta).
 
 **Deferred:** Developer ID signing, notarization and auto-update (need the Apple Developer
 Program); Windows/Linux builds; an "update available" check (needs a public repo, Phase 5).

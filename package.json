@@ -2,6 +2,7 @@
   "name": "budget_app",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "dev": "node scripts/run.mjs next dev -H 127.0.0.1",
