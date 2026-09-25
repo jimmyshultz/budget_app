@@ -18,7 +18,10 @@ Plaid's dashboard changes from time to time, so menu names may differ slightly f
 Sandbox is Plaid's test environment. Every bank in it is fake, so it's a safe way to try the app.
 
 1. In the dashboard, open **Developers → Keys**.
-2. Copy your **client ID** and your **Sandbox secret**.
+2. Copy your **client ID** and your **Sandbox secret**. Click the copy button next to each; you
+   don't need to reveal the secret.
+
+   <img src="images/plaid-keys.png" width="700" alt="The Plaid dashboard's Keys page under Developers: a Client ID field, a Production secret and a Sandbox secret, each hidden with copy buttons.">
 3. In Budget, enter them on the setup page (or **Settings**), choose **Sandbox**, and click **Save**.
    Running from source instead? Put them in `.env.local` as `PLAID_CLIENT_ID` and `PLAID_SECRET`
    with `PLAID_ENV=sandbox`.
@@ -27,7 +30,10 @@ Sandbox is Plaid's test environment. Every bank in it is fake, so it's a safe wa
 
 4. On **Accounts**, click **Connect account**. Plaid opens in your browser. Pick any bank and log in
    with `user_good` / `pass_good`. For a larger, more realistic data set, use
-   `user_transactions_dynamic` with any password.
+   `user_transactions_dynamic` with any password. The dashboard's **Developers → Sandbox** page lists
+   these test users.
+
+   <img src="images/plaid-sandbox.png" width="700" alt="Plaid's Sandbox Studio page: the client ID and Sandbox secret, and test credentials user_good and pass_good, above a list of test users.">
 
    <img src="images/accounts.png" width="700" alt="The Accounts page: a connection-type menu set to Bank or credit card, a green Connect account button, and a connected Sandbox bank with Reconnect and Disconnect links.">
 
@@ -36,8 +42,13 @@ Sandbox is Plaid's test environment. Every bank in it is fake, so it's a safe wa
 
 ## 3. Get Production access (your real accounts)
 
-1. In the dashboard, request **Production** access. Plaid asks about your use case: a personal
-   budgeting tool for yourself is the honest answer.
+1. In the dashboard, click **Get full access** to request **Production** access. Plaid asks about
+   your use case: a personal budgeting tool for yourself is the honest answer. Your dashboard's
+   **Home** page may instead offer a free trial with a limited number of Production connections,
+   which is plenty for one person.
+
+   <img src="images/plaid-home.png" width="700" alt="The Plaid dashboard's Home page: a Free trial banner offering up to 10 connections, Get full access in the sidebar and under Keys, and the Production client ID and secret.">
+
 2. Request only the products you'll use:
 
    | Product | What it's for in Budget |
