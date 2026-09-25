@@ -12,12 +12,16 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { parseEnv } from "node:util";
-import { app, BrowserWindow, dialog, Menu, session, shell, utilityProcess } from "electron";
+import { app, BrowserWindow, dialog, Menu, net as electronNet, session, shell, utilityProcess } from "electron";
+import { prefs } from "./preferences.mjs";
 import { loadOrInitSecrets, loadSecrets, saveSecrets } from "./secrets.mjs";
+import { checkForUpdates, repoSlug } from "./updates.mjs";
 
 const DEV_ROOT = path.join(import.meta.dirname, "..");
 const TOKEN_COOKIE = "budget_token"; // keep in sync with src/proxy.ts
 const SHUTDOWN_TIMEOUT_MS = 5000;
+const UPDATE_CHECK_DELAY_MS = 5000;
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /** Next.js inline scripts/styles need 'unsafe-inline'; everything else is same-origin only. */
 const CSP = [
@@ -222,11 +226,98 @@ async function createWindow(origin, appToken, startPath) {
   return win;
 }
 
+// ─── Update check ────────────────────────────────────────────────────────────
+function readPackageJson() {
+  return JSON.parse(fs.readFileSync(path.join(app.getAppPath(), "package.json"), "utf8"));
+}
+
+/** The running version. Development only: BUDGET_FAKE_VERSION pretends to be an older build. */
+const currentVersion = () => (!app.isPackaged && process.env.BUDGET_FAKE_VERSION) || app.getVersion();
+
+const updateUi = {
+  async showUpdateAvailable(latest, current) {
+    const { response } = await dialog.showMessageBox(mainWindow ?? undefined, {
+      type: "info",
+      message: `Budget ${latest} is available`,
+      detail:
+        `You have ${current}. Download the new version from GitHub and drag it into Applications ` +
+        "to replace this one. Your data and settings are kept.",
+      buttons: ["Download", "Later", "Skip This Version"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    return ["download", "later", "skip"][response];
+  },
+  async showUpToDate(current) {
+    await dialog.showMessageBox(mainWindow ?? undefined, { type: "info", message: "Budget is up to date", detail: `You have the latest version, ${current}.` });
+  },
+  async showError(message) {
+    await dialog.showMessageBox(mainWindow ?? undefined, { type: "warning", message: "Couldn't check for updates", detail: message });
+  },
+  openExternal: (url) => shell.openExternal(url),
+};
+
+let updateCheckRunning = false;
+async function runUpdateCheck({ manual }) {
+  const slug = repoSlug(readPackageJson().repository);
+  if (!slug || updateCheckRunning) return;
+  updateCheckRunning = true;
+  try {
+    const result = await checkForUpdates({
+      slug,
+      currentVersion: currentVersion(),
+      prefs,
+      ui: updateUi,
+      manual,
+      fetchImpl: electronNet.fetch,
+    });
+    console.log(`[desktop] update check: ${result}`);
+  } finally {
+    updateCheckRunning = false;
+  }
+}
+
+/** Automatic checks: shortly after launch, then daily. Packaged builds only (or a faked version). */
+function scheduleUpdateChecks() {
+  if (!app.isPackaged && !process.env.BUDGET_FAKE_VERSION) return;
+  const auto = () => prefs.get().checkForUpdates && runUpdateCheck({ manual: false });
+  setTimeout(auto, UPDATE_CHECK_DELAY_MS);
+  setInterval(auto, UPDATE_CHECK_INTERVAL_MS);
+}
+
 function buildMenu() {
   const isMac = process.platform === "darwin";
+  const updateItems = [
+    { label: "Check for Updates…", click: () => runUpdateCheck({ manual: true }) },
+    {
+      label: "Check for Updates Automatically",
+      type: "checkbox",
+      checked: prefs.get().checkForUpdates,
+      click: (item) => prefs.set({ checkForUpdates: item.checked }),
+    },
+  ];
   /** @type {Electron.MenuItemConstructorOptions[]} */
   const template = [
-    ...(isMac ? [{ role: "appMenu" }] : []),
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: "about" },
+              { type: "separator" },
+              ...updateItems,
+              { type: "separator" },
+              { role: "services" },
+              { type: "separator" },
+              { role: "hide" },
+              { role: "hideOthers" },
+              { role: "unhide" },
+              { type: "separator" },
+              { role: "quit" },
+            ],
+          },
+        ]
+      : []),
     { role: "fileMenu" },
     { role: "editMenu" },
     {
@@ -243,6 +334,7 @@ function buildMenu() {
       ],
     },
     { role: "windowMenu" },
+    ...(isMac ? [] : [{ role: "help", submenu: updateItems }]),
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -260,6 +352,7 @@ async function start() {
   // First run (no Plaid keys yet) opens the setup page.
   const startPath = secrets.plaidClientId && secrets.plaidSecret ? "/" : "/setup";
   mainWindow = await createWindow(`http://127.0.0.1:${port}`, appToken, startPath);
+  scheduleUpdateChecks();
 }
 
 // Single-window app: closing the window quits, on every platform.

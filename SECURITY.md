@@ -19,8 +19,12 @@ Only the latest release gets security fixes.
 Knowing the intended boundaries helps decide whether something is a vulnerability.
 
 - **Everything runs on your computer.** There is no Budget server or account. Your data is a
-  SQLite file in your user folder, and the only outside service the app talks to is Plaid, using
-  keys you supply from your own Plaid account.
+  SQLite file in your user folder, and the only outside service that receives your data is Plaid,
+  using keys you supply from your own Plaid account.
+- **Update check:** the desktop app makes an anonymous request to `api.github.com` at launch and
+  once a day to see whether a newer release exists. It sends no data and downloads nothing; if
+  there's a new version it offers to open the release page. Turn it off in the app menu
+  (**Budget → Check for Updates Automatically**).
 - **The local server** listens on `127.0.0.1` only and rejects requests whose `Host` isn't
   localhost (DNS-rebinding protection). In the desktop app it runs on a random port and every
   request must carry a per-launch token held in an HTTP-only cookie by the app's window.

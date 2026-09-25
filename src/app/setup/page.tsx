@@ -16,7 +16,7 @@ export default async function SetupPage() {
         <h1 className="text-2xl font-semibold">Welcome to Budget</h1>
         <p className="text-ink-secondary">
           Budget runs entirely on this computer. Your transactions, budgets and settings are stored here, and the only
-          outside service it talks to is Plaid, which connects to your banks. You use your own free Plaid account, so
+          outside service that sees them is Plaid, which connects to your banks. You use your own free Plaid account, so
           nobody else is in the middle.
         </p>
       </section>

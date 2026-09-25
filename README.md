@@ -5,8 +5,9 @@ A personal budgeting app in the spirit of Mint. It pulls in your accounts and tr
 budget (income and spending) and track it as the month goes.
 
 It runs **only on your own computer**. There's no Budget server or account: your data lives in a
-local SQLite file, and the only outside service the app talks to is Plaid, using keys from your own
-free Plaid account.
+local SQLite file, and the only outside service that sees your data is Plaid, using keys from your
+own free Plaid account. (The desktop app also checks GitHub once a day for a new version; that
+request carries no data and can be turned off.)
 
 - **Just want to use it?** [Download the macOS app](#install-the-desktop-app-macos), then follow the
   [Plaid setup guide](docs/plaid-setup.md).
@@ -57,6 +58,11 @@ Because the app isn't Developer ID-signed, macOS treats each new version as a di
 an update you'll see *"Budget wants to use your confidential information stored in 'Budget Safe
 Storage' in your keychain"*. Enter your password and click **Always Allow** (not **Allow**) and it
 won't ask again until the next update. The app waits while that prompt is open.
+
+**Updates:** Budget checks GitHub for a new version at launch and once a day, and offers to open
+the download page when there is one. Download the new `.dmg` and drag Budget into Applications to
+replace the old version; your data is kept. **Budget → Check for Updates…** checks right away, and
+**Check for Updates Automatically** turns the daily check off.
 
 On first launch, Budget walks you through entering your Plaid keys; the
 [Plaid setup guide](docs/plaid-setup.md) covers getting them, including Production access for your real accounts. Its data lives in

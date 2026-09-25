@@ -238,3 +238,24 @@ Developer ID signing removes this (Keychain trusts any build from the same team)
 
 **Deferred:** Developer ID signing, notarization and auto-update (need the Apple Developer
 Program); Windows/Linux builds; an "update available" check (needs a public repo, Phase 5).
+
+## Phase 5 results (open-source launch)
+
+Done. The repo is public under the MIT license, with `SECURITY.md` (private vulnerability reporting
+turned on), `docs/plaid-setup.md`, issue templates that warn against posting financial data, and a
+README that leads with the desktop download. Before going public, the full history was checked
+against the real Plaid keys, the encryption key and every text value in the local databases: none
+appear. v0.1.0 was released from the tag-triggered workflow. electron-builder's own publishing
+created two drafts (one per architecture), so the workflow now builds without publishing and
+creates a single draft with `gh release create`.
+
+## Update check
+
+`electron/updates.mjs`: at launch (after 5 s) and daily, the desktop app asks
+`api.github.com/repos/<repository>/releases/latest` (repository from `package.json`; drafts and
+pre-releases are excluded) and, if it's newer, offers **Download** (opens the release page),
+**Later** or **Skip This Version**. The menu has **Check for Updates…** and an on/off switch, stored
+in `<userData>/preferences.json`. Nothing is downloaded or installed automatically; that needs a
+signed app (`electron-updater`). Automatic checks run only in packaged builds;
+`BUDGET_FAKE_VERSION=0.0.1 npm run desktop` tests them in development.
+
