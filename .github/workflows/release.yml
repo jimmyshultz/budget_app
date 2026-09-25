@@ -44,10 +44,17 @@ jobs:
       - run: node scripts/build-desktop.mjs
 
       - name: Package
-        run: npx electron-builder --mac --arm64 --x64 --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
+        run: npx electron-builder --mac --arm64 --x64 --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      # One draft release with both installers. (electron-builder's own publishing uploads each
+      # architecture in parallel and can create two drafts.)
+      - name: Create draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: gh release create "$GITHUB_REF_NAME" --draft --title "Budget ${GITHUB_REF_NAME#v}" --generate-notes dist-desktop/*.dmg
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - uses: actions/upload-artifact@v4
         with:
