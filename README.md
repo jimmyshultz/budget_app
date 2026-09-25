@@ -118,10 +118,14 @@ budgets and rules are kept, but each institution has to be reconnected.
 The app can also run as an Electron desktop app; see `PLAN.md` for the design and status.
 
 ```bash
-npm run desktop -- --import-dev-secrets   # first run: copy this checkout's Plaid keys and key
 npm run desktop                            # build the server and open the app
+npm run desktop -- --import-dev-secrets    # optional: reuse this checkout's Plaid keys and key
 npm run desktop:package                    # unsigned Budget.app in dist-desktop/
 ```
+
+On first launch the app opens a setup page where you enter your Plaid keys; change them later in
+**Settings**, which also has **Download a backup**. `BUDGET_USER_DATA=/some/folder npm run desktop`
+uses a separate profile (handy for trying the first-run experience).
 
 The desktop app keeps its data and encrypted secrets in the OS per-user app-data folder
 (`~/Library/Application Support/Budget` on macOS), separate from this checkout's `data/`.

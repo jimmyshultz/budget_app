@@ -169,3 +169,30 @@ builds an unsigned `dist-desktop/mac-arm64/Budget.app`, which launches and works
   Plaid keys yet); optional `completion_redirect_uri` to bring the app forward after Hosted Link.
 - Phase 4: signing and notarization, icons, x64 and universal builds, Windows and Linux, trimming
   unused server dependencies (e.g. `sharp`), release automation.
+
+## Phase 3 results (in-app setup and settings)
+
+Done. A fresh install opens **/setup** (the desktop app checks for stored Plaid keys), and
+**/settings** manages keys and data.
+
+- **Setup:** what the app is, how to get Plaid keys (links open in the browser), key form with
+  **Test keys** and **Save**, a Sandbox tip (`user_good`/`pass_good`) and a going-live checklist.
+  "Skip for now" leaves Plaid unset; a banner on every page links back to setup.
+- **Settings:** change client ID, secret (blank keeps the saved one; the saved secret is never sent
+  to the page) and environment. Keys are tested with Plaid before saving. Switching environment or
+  Plaid account while connections exist requires ticking a confirmation; connections are then
+  removed on Plaid's side with the old keys and deleted locally (budgets, rules and manual accounts
+  are kept).
+- **Saving:** `saveSettings()` calls a persister registered by the desktop bridge, which sends
+  `save-settings` to the main process; main stores the values with `safeStorage` and confirms. From
+  source there's no persister, so the pages explain that keys come from `.env.local`.
+- **Backup:** `POST /api/backup` (same-origin only) streams a consistent SQLite online-backup
+  snapshot as `budget-backup-YYYY-MM-DD.db`. In the desktop app it opens the system Save dialog.
+- Dev-only `BUDGET_USER_DATA=<folder>` runs the desktop app against a separate profile.
+
+**Verified:** fresh profile opens Setup; saving real keys stores them encrypted (not in plain text)
+and the next launch opens Budget; Save with a blank secret keeps it; backup download works in the
+desktop app and via curl (valid SQLite, integrity OK; cross-site and header-less requests 403).
+
+**Deferred:** `completion_redirect_uri` to bring the app forward after Hosted Link (polling works
+well enough); restoring a backup from the app; replacing the dev-only `--import-dev-secrets`.
