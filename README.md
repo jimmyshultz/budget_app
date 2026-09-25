@@ -34,12 +34,24 @@ Download the `.dmg` for your Mac from the [Releases page](https://github.com/jim
 - **Intel**: `Budget-<version>-x64.dmg`
 
 Open it and drag **Budget** to Applications. The app isn't signed with an Apple Developer ID yet,
-so the first time you open it macOS will say it can't verify the developer:
+so the first time you open it macOS blocks it with:
 
-1. Try to open Budget once, then click **Done** (not Move to Trash).
-2. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to
-   the message about Budget. Confirm with your password or Touch ID.
-3. After that it opens normally.
+> **"Budget" Not Opened**
+> Apple could not verify "Budget" is free of malware that may harm your Mac or compromise your privacy.
+
+That's the standard message for any app from a developer who isn't registered with Apple, not a
+sign that anything is wrong with the download. To open it:
+
+1. Click **Done** (not Move to Trash).
+2. Open **System Settings → Privacy & Security** and scroll down to **Security**. Next to
+   *"Budget" was blocked to protect your Mac*, click **Open Anyway**.
+3. Confirm with your password or Touch ID, then click **Open Anyway** once more.
+4. After that it opens normally.
+
+The **Open Anyway** button only appears for about an hour after you try to open the app. If it's
+not there, try opening Budget again first. On recent macOS versions, right-click → Open no longer
+skips this step. Comfortable with Terminal? `xattr -dr com.apple.quarantine /Applications/Budget.app`
+does the same thing.
 
 Because the app isn't Developer ID-signed, macOS treats each new version as a different app. After
 an update you'll see *"Budget wants to use your confidential information stored in 'Budget Safe
