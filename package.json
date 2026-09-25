@@ -16,7 +16,8 @@
     "key:to-keychain": "node scripts/move-key-to-keychain.mjs",
     "app": "npm run build && npm run start",
     "desktop": "node scripts/build-desktop.mjs && electron .",
-    "desktop:package": "node scripts/build-desktop.mjs && electron-builder --dir"
+    "desktop:package": "node scripts/build-desktop.mjs && electron-builder --mac --arm64 --x64",
+    "desktop:package:dir": "node scripts/build-desktop.mjs && electron-builder --mac --dir"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
@@ -48,19 +49,41 @@
   "build": {
     "appId": "com.budgetapp.desktop",
     "productName": "Budget",
+    "copyright": "Copyright © 2026 Budget App contributors",
     "directories": {
-      "output": "dist-desktop"
+      "output": "dist-desktop",
+      "buildResources": "resources"
     },
     "files": [
       "electron/**/*",
       "package.json",
       "!**/node_modules/**"
     ],
+    "afterPack": "scripts/after-pack.mjs",
+    "npmRebuild": false,
     "mac": {
       "category": "public.app-category.finance",
-      "target": "dir"
+      "icon": "resources/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "identity": "-",
+      "artifactName": "Budget-${version}-${arch}.${ext}",
+      "hardenedRuntime": false
     },
-    "npmRebuild": false,
-    "afterPack": "scripts/after-pack.mjs"
-  }
+    "dmg": {
+      "artifactName": "Budget-${version}-${arch}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "releaseType": "draft"
+    }
+  },
+  "description": "Local-only personal budgeting app (Next.js, SQLite, Plaid)"
 }

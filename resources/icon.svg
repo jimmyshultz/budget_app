@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- macOS icon grid: 824×824 body centered on a 1024 canvas, ~185px corner radius -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#2a78d6"/>
+  <!-- Three ascending bars on a baseline: spending over time -->
+  <g fill="#ffffff">
+    <rect x="262" y="552" width="120" height="200" rx="24"/>
+    <rect x="452" y="432" width="120" height="320" rx="24"/>
+    <rect x="642" y="292" width="120" height="460" rx="24"/>
+  </g>
+  <rect x="232" y="772" width="560" height="20" rx="10" fill="#cde2fb"/>
+</svg>

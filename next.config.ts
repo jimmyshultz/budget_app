@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
   // Self-contained server build (.next/standalone) for the desktop app. Only when asked for,
   // since `next start` (npm run app) doesn't support it.
   output: process.env.BUILD_STANDALONE === "1" ? "standalone" : undefined,
+  // No next/image optimization is used; this also lets desktop builds drop `sharp`.
+  images: { unoptimized: true },
   // Migrations are read from disk at startup, so the tracer can't see them.
   outputFileTracingIncludes: { "/*": ["./drizzle/**/*"] },
   // NEVER ship local data or secrets: the tracer sees path.join(cwd, "data") in the config module

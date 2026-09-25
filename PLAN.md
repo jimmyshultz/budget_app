@@ -196,3 +196,41 @@ desktop app and via curl (valid SQLite, integrity OK; cross-site and header-less
 
 **Deferred:** `completion_redirect_uri` to bring the app forward after Hosted Link (polling works
 well enough); restoring a backup from the app; replacing the dev-only `--import-dev-secrets`.
+
+## Phase 4 results (packaging and releases, macOS only, unsigned)
+
+Decisions: **macOS only** for version 1; **no Apple Developer account yet** (ad-hoc signed).
+
+- `npm run desktop:package` builds `Budget-<version>-arm64.dmg` and `Budget-<version>-x64.dmg`
+  (~127/132 MB); `desktop:package:dir` builds just the `.app`.
+- **Ad-hoc signing** (`mac.identity: "-"`): unsigned Apple Silicon apps downloaded from the internet
+  are reported as "damaged"; ad-hoc signed ones get the normal "can't verify the developer" flow
+  (System Settings → Open Anyway). `hardenedRuntime` is off: with ad-hoc signing it blocks loading
+  the SQLite native module, and it's only needed for notarization. Signatures verified with
+  `codesign --verify --deep --strict`, including the `.node` binary.
+- **Per-architecture SQLite:** the tracer only copies the build machine's SQLite binary, so
+  `build-desktop.mjs` copies all prebuilds and `after-pack.mjs` keeps exactly the target's, failing
+  the build if it's missing. Verified with `lipo`: arm64 app ↔ `darwin-arm64.node`, x64 app ↔
+  `darwin-x64.node`.
+- Dropped `sharp`/`@img` (image optimization is off): ~29 MB smaller, and removes the only other
+  architecture-specific dependency.
+- **Icon:** `resources/icon.svg` → `resources/icon.png` via `npx electron scripts/render-icon.mjs`
+  (transparent corners).
+- **CI:** `.github/workflows/release.yml` on `macos-15`: a `v*` tag builds both installers and
+  attaches them to a **draft** release (tag must match `package.json` version); manual runs build
+  only and upload an artifact. Runs typecheck, lint and the no-data/no-env build check first.
+- README: install steps for an unsigned app.
+
+**Keychain prompts (found while testing):** `safeStorage` keeps its key in the login Keychain item
+"Budget Safe Storage", whose access list is tied to the app's code signature. Ad-hoc signatures
+change with every build and differ per architecture, so each new version (and the other
+architecture's build) triggers *"Budget wants to use your confidential information…"*, and the app
+blocks until it's answered. Users should click **Always Allow**; it returns after each update.
+Developer ID signing removes this (Keychain trusts any build from the same team). The Intel build
+"hung" under Rosetta only while that prompt was waiting; it isn't otherwise broken.
+
+**Not verified:** the Intel build on real Intel hardware (only under Rosetta); the GitHub Actions
+workflow hasn't run yet.
+
+**Deferred:** Developer ID signing, notarization and auto-update (need the Apple Developer
+Program); Windows/Linux builds; an "update available" check (needs a public repo, Phase 5).

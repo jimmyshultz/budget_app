@@ -1,0 +1,56 @@
+# Builds the macOS desktop app (Apple Silicon and Intel .dmg).
+#   - Push a tag like v0.1.0 → builds and attaches the installers to a DRAFT GitHub Release
+#     (review it, then publish). The tag must match "version" in package.json.
+#   - Run it manually (Actions → Release desktop app → Run workflow) → builds only; the
+#     installers are uploaded as a workflow artifact.
+#
+# Builds are ad-hoc signed (no Apple Developer account yet). To sign and notarize later, add
+# CSC_LINK / CSC_KEY_PASSWORD and APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID secrets,
+# remove CSC_IDENTITY_AUTO_DISCOVERY below, and set mac.identity / hardenedRuntime in package.json.
+name: Release desktop app
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # create the draft release
+
+jobs:
+  macos:
+    runs-on: macos-15 # Apple Silicon runner; cross-builds the Intel app too
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version="v$(node -p 'require("./package.json").version')"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME doesn't match package.json version $version"; exit 1
+          fi
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+
+      # Builds the standalone server and fails if any database or env file is in it.
+      - run: node scripts/build-desktop.mjs
+
+      - name: Package
+        run: npx electron-builder --mac --arm64 --x64 --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Budget-macos
+          path: dist-desktop/*.dmg
+          retention-days: 14

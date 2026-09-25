@@ -16,5 +16,17 @@ export default async function afterPack(context) {
   const target = path.join(resources, "server");
   fs.rmSync(target, { recursive: true, force: true });
   fs.cpSync(source, target, { recursive: true, verbatimSymlinks: true });
+
+  // better-sqlite3 ships prebuilt binaries for every platform; keep only this build's, and
+  // refuse to package if it's missing (the app would crash at startup on that machine).
+  const arch = { 0: "ia32", 1: "x64", 2: "armv7l", 3: "arm64", 4: "universal" }[context.arch];
+  const prebuilds = path.join(target, "node_modules", "better-sqlite3", "prebuilds");
+  const needed =
+    arch === "universal"
+      ? ["arm64", "x64"].map((a) => `${context.electronPlatformName}-${a}.node`)
+      : [`${context.electronPlatformName}-${arch}.node`];
+  const missing = needed.filter((file) => !fs.existsSync(path.join(prebuilds, file)));
+  if (missing.length) throw new Error(`SQLite binary missing for this build: ${missing.join(", ")}`);
+  for (const file of fs.readdirSync(prebuilds)) if (!needed.includes(file)) fs.rmSync(path.join(prebuilds, file));
   console.log(`  • copied desktop server  to=${path.relative(context.packager.projectDir, target)}`);
 }

@@ -113,15 +113,43 @@ Your data is `data/budget.db` plus `.env.local`, and the encryption key is in yo
 An encrypted Time Machine backup covers all three. If the Keychain item is lost, your history,
 budgets and rules are kept, but each institution has to be reconnected.
 
-## Desktop app (work in progress)
+## Installing the desktop app (macOS)
+
+Download the `.dmg` for your Mac from the GitHub Releases page:
+
+- **Apple Silicon** (M1 or later): `Budget-<version>-arm64.dmg`
+- **Intel**: `Budget-<version>-x64.dmg`
+
+Open it and drag **Budget** to Applications. The app isn't signed with an Apple Developer ID yet,
+so the first time you open it macOS will say it can't verify the developer:
+
+1. Try to open Budget once, then click **Done** (not Move to Trash).
+2. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to
+   the message about Budget. Confirm with your password or Touch ID.
+3. After that it opens normally.
+
+Because the app isn't Developer ID-signed, macOS treats each new version as a different app. After
+an update you'll see *"Budget wants to use your confidential information stored in 'Budget Safe
+Storage' in your keychain"*. Enter your password and click **Always Allow** (not **Allow**) and it
+won't ask again until the next update. The app waits while that prompt is open.
+
+On first launch, Budget walks you through entering your Plaid keys. Its data lives in
+`~/Library/Application Support/Budget`; see [Backups](#backups).
+
+## Desktop app development
 
 The app can also run as an Electron desktop app; see `PLAN.md` for the design and status.
 
 ```bash
 npm run desktop                            # build the server and open the app
 npm run desktop -- --import-dev-secrets    # optional: reuse this checkout's Plaid keys and key
-npm run desktop:package                    # unsigned Budget.app in dist-desktop/
+npm run desktop:package                    # arm64 + x64 .dmg in dist-desktop/
+npm run desktop:package:dir                # just the .app, for quick local testing
 ```
+
+Releases are built by GitHub Actions (`.github/workflows/release.yml`): bump `version` in
+`package.json`, commit, then push a matching tag (`git tag v0.2.0 && git push origin v0.2.0`). The
+workflow attaches both installers to a draft release for you to review and publish.
 
 On first launch the app opens a setup page where you enter your Plaid keys; change them later in
 **Settings**, which also has **Download a backup**. `BUDGET_USER_DATA=/some/folder npm run desktop`

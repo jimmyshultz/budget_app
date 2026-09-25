@@ -17,6 +17,18 @@ execFileSync("npx", ["next", "build"], {
 fs.cpSync(path.join(".next", "static"), path.join(OUT, ".next", "static"), { recursive: true });
 if (fs.existsSync("public")) fs.cpSync("public", path.join(OUT, "public"), { recursive: true });
 
+// Image optimization is off (next.config images.unoptimized), so drop `sharp` and its
+// platform-specific binaries: ~29 MB, and only built for this machine's architecture.
+for (const dir of ["sharp", "@img"]) fs.rmSync(path.join(OUT, "node_modules", dir), { recursive: true, force: true });
+
+// The tracer only copies the SQLite binary for the machine doing the build. Copy them all;
+// scripts/after-pack.mjs keeps just the one each packaged app needs.
+fs.cpSync(
+  path.join("node_modules", "better-sqlite3", "prebuilds"),
+  path.join(OUT, "node_modules", "better-sqlite3", "prebuilds"),
+  { recursive: true },
+);
+
 // Never ship a database, env file or data folder.
 const FORBIDDEN = [/\.db(-wal|-shm)?$/, /^\.env/, /^data$/];
 const offenders = [];
